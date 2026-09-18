@@ -74,4 +74,18 @@ For one arm, use `python python/run_router.py --help`. Every run writes a manife
 
 Use `python/ssched/scoring/workload_audit.py` for each run and the setting-specific comparison scripts after all replicates finish. Goodput is SLO-qualified prompt-token throughput for prefill-only and SLO-qualified generated-token throughput for PD-mixed. SLO budgets and TTFT percentile definitions are recorded in the scorer source and in the PR text generated from these artifacts. Report medians and replicate spread; do not treat one closed-loop run as a capacity estimate.
 
+After the matrix completes, aggregate all three replicates for a setting with:
+
+```bash
+PYTHONPATH=python python scripts/summarize_replicates.py \
+  --setting po --output results/po/replicates.json
+PYTHONPATH=python python scripts/summarize_replicates.py \
+  --setting pd110 --output results/pd110/replicates.json
+```
+
+The aggregate records every run, mean/median/sample spread, p50/p90/p95/p99
+latency, and the exact common session-turn cohort. Commit only these compact
+JSON reports and Markdown tables; keep request ledgers and engine logs out of
+the public repository.
+
 The KV Events integration is maintained separately from the SMetric policy proposal. Tree-only execution remains supported, but the KV-event measurements in this repository should not be attributed to Tree-only state estimates.
