@@ -10,13 +10,13 @@ The policy is described in [SMetric: Rethink LLM Scheduling for Serving Agents w
 
 - `router/`: self-contained vLLM Router source snapshot. It includes the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the upstream v0.1.15 commit and the source snapshot hash; `router/SOURCE_DIFF.patch` is the exact source delta from that upstream commit.
 - `patches/`: readable patch files corresponding to the Router adaptations. They document the delta from the upstream release even though the runnable artifact uses the pinned source snapshot to avoid patch-order ambiguity.
-- `python/ssched/`: the request constructor, prompt reconstruction, session-causal replayer, run manifest, engine-state recorder, and workload scoring code. The replayer sends token IDs directly, preserves turn order, and in prefill-only mode retains earlier trace assistant replies in later prompts.
+- `python/repro/`: standalone request constructor, prompt reconstruction, session-causal replayer, trace importer, run manifest, and metric recorder. It is self-contained and sends token IDs directly; it does not import the `ssched` repository or a Python scheduler.
 - `configs/`: the 400K-context prefill-only workload and the 110-session PD-mixed workload. The 220-session PD-mixed configuration is included for extension runs.
 - `engine/`: vLLM 0.18.1 patch manifest and runtime notes for LMCache and Mooncake.
 - `scripts/`: trace preparation, Router build, and a matrix driver for repeated arms.
 - `results/`: compact result summaries and comparison metadata; large raw request and router logs are generated locally and are not required in Git.
 
-Redis is used by the benchmark recorder only for post-run engine queue telemetry. The Router process itself does not read Redis, LMCache, Mooncake, or a Python scheduler.
+The Router process and this replayer do not read or start Redis. LMCache and Mooncake are engine-side cache services; routing decisions use only Router lifecycle state, the prefix Tree, and KV Events.
 
 ## Policies and calibrated parameters
 
@@ -26,7 +26,7 @@ Every arm uses the same Router binary, eight TP=1 workers, PR #130-based KV Even
 - `smetric_default`: native SMetric with the `overload` gate and upstream native defaults. It requires no drain-rate or SLO calibration.
 - `smetric_optimized`: native SMetric with `budget_attention`, a 300-second online drain-rate window, eight minimum samples, fallback drain rate 21,400 tokens/s, attention cost scale 6,923 tokens, and calibrated `budget_gamma=1.1`. The gamma is an explicit benchmark parameter and can be overridden by `--smetric-budget-gamma` for sensitivity runs.
 
-The Router receives only its own request lifecycle state, prefix Tree state, and KV Events. It does not use the Redis observer feed for routing decisions.
+The Router receives only its own request lifecycle state, prefix Tree state, and KV Events.
 
 The benchmark replayer sends `X-Session-Id` and `X-Session-Turn`. The optimized
 implementation uses the session ID only for a bounded, TTL-limited lease
@@ -59,7 +59,7 @@ The engine host must provide Qwen3-Coder-30B-A3B-Instruct, vLLM 0.18.1 with the 
 
 ## Running the matrix
 
-The matrix driver intentionally requires a reset hook. The hook must stop the previous Router and workers, clear Redis and Mooncake, start eight healthy workers, and return only after `master_key_count=0` and all health endpoints are ready. This prevents cache state from leaking between policies or replicates.
+The matrix driver intentionally requires a reset hook. The hook must stop the previous Router and workers, clear Mooncake, start eight healthy workers, and return only after `master_key_count=0`, eight KV-event endpoints, and all health endpoints are ready. This prevents cache state from leaking between policies or replicates.
 
 ```bash
 PYTHONPATH=python python scripts/run_matrix.py \
@@ -72,7 +72,7 @@ For one arm, use `python python/run_router.py --help`. Every run writes a manife
 
 ## Scoring
 
-Use `python/ssched/scoring/workload_audit.py` for each run and the setting-specific comparison scripts after all replicates finish. Goodput is SLO-qualified prompt-token throughput for prefill-only and SLO-qualified generated-token throughput for PD-mixed. SLO budgets and TTFT percentile definitions are recorded in the scorer source and in the PR text generated from these artifacts. Report medians and replicate spread; do not treat one closed-loop run as a capacity estimate.
+Use `scripts/summarize_replicates.py` after all replicates finish. Goodput is SLO-qualified prompt-token throughput for prefill-only and SLO-qualified generated-token throughput for PD-mixed. Report medians and replicate spread; do not treat one closed-loop run as a capacity estimate.
 
 After the matrix completes, aggregate all three replicates for a setting with:
 

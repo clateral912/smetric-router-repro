@@ -5,7 +5,7 @@
   "kv_events_pr130_snapshot_commit": "631fd0147549f237a0e9f566ad84e7565d873b79",
   "source_kind": "self-contained source snapshot; no Redis or Python scheduler is required by the router",
   "source_diff": "SOURCE_DIFF.patch",
-  "source_diff_sha256": "4b8c4084b02a56722f64b8b25e4715cfcb83cda80b074b6f8d1151506ff82cfd",
+  "source_diff_sha256": "564cfd44f6aae3441812c8ba6d2b3a1c726d460aeece4ccc614125e74d216e66",
   "patches": [
     "../patches/vllm-router-token-prefix.patch",
     "../patches/vllm-router-placement-header.patch",

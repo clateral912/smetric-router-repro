@@ -20,12 +20,10 @@ Path(output).write_bytes(Path(source).read_bytes())
 PY
 fi
 export PYTHONPATH="$ROOT/python"
-python -m ssched.cli trace codex-import --input "$RAW" --tokenizer "$MODEL_TOKENIZER" \
+python "$ROOT/python/build_trace.py" --input "$RAW" --tokenizer "$MODEL_TOKENIZER" --sessions 220 \
   --output "$ROOT/traces/codex/steady_warm1200_measure600_n220_seed42.jsonl" \
-  --span-seconds 900 --pre-roll-seconds 1200 --replay-pre-roll \
-  --arrival-scheme stratified --sessions 220 --nominal-tpot 0 --seed 42
-python -m ssched.cli trace codex-import --input "$RAW" --tokenizer "$MODEL_TOKENIZER" \
+  --span-seconds 900 --pre-roll-seconds 1200 --seed 42
+python "$ROOT/python/build_trace.py" --input "$RAW" --tokenizer "$MODEL_TOKENIZER" --sessions 110 \
   --output "$ROOT/traces/codex/steady_warm1200_measure600_n110_seed42.jsonl" \
-  --span-seconds 900 --pre-roll-seconds 1200 --replay-pre-roll \
-  --arrival-scheme stratified --sessions 110 --nominal-tpot 0 --seed 42
+  --span-seconds 900 --pre-roll-seconds 1200 --seed 42
 sha256sum "$ROOT"/traces/codex/steady_warm1200_measure600_n{220,110}_seed42.jsonl

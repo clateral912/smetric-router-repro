@@ -1,0 +1,60 @@
+{
+  "_prom_diag": {
+    "external_cache_hits": 3547984,
+    "external_cache_queries": 24929698,
+    "prefix_cache_hits": 410120960,
+    "prefix_cache_queries": 435050658
+  },
+  "actual_output_tokens_stats": {
+    "count": 6204.0,
+    "mean": 1.0,
+    "p50": 1.0,
+    "p90": 1.0,
+    "p99": 1.0
+  },
+  "amplification": 0.7415331355066747,
+  "cache_hit_request_count": 6204,
+  "cached_tokens_stats": {
+    "count": 6204.0,
+    "mean": 66649.96776273372,
+    "p50": 60928.0,
+    "p90": 117248.0,
+    "p99": 190464.0
+  },
+  "dispatch_mode": "thinktime",
+  "error_count": 789,
+  "latency_stats_s": {
+    "count": 6204.0,
+    "mean": 2.8195271269874054,
+    "p50": 1.5246858298778534,
+    "p90": 6.200824996456503,
+    "p99": 18.647855677567453
+  },
+  "prefix_cache_hit_ratio": 0.9508613458815623,
+  "request_cache_breakdown": {
+    "cpu_hit_ratio": 0.008158815509412535,
+    "cpu_hit_tokens": 3547984,
+    "gpu_hit_ratio": 0.9427025303721498,
+    "gpu_hit_tokens": 409948416
+  },
+  "request_count": 6993,
+  "success_count": 6204,
+  "total_cached_tokens": 413496400,
+  "total_input_tokens": 434865085,
+  "tpot_stats_s": {
+    "count": 6204.0,
+    "mean": 0.0,
+    "p50": 0.0,
+    "p90": 0.0,
+    "p99": 0.0
+  },
+  "trace_span_s": 2832.994628,
+  "ttft_stats_s": {
+    "count": 6204.0,
+    "mean": 2.8188028916570063,
+    "p50": 1.5243947245180607,
+    "p90": 6.200253038480877,
+    "p99": 18.64583265710625
+  },
+  "wall_clock_s": 2100.759389374405
+}

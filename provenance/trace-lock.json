@@ -3,7 +3,9 @@
   "source_file": "codex_swebenchpro.json",
   "generated": true,
   "generated_files": {
-    "traces/codex/steady_warm1200_measure600_n220_seed42.jsonl": "bf867df2b851180da9e3658039321b59b99cbe858276732fd33343c331e6b8",
+    "traces/codex/steady_warm1200_measure600_n220_seed42.jsonl": "bf867df2b85118091da9e3658039321b59b99cbe858276732fd33343c331e6b8",
     "traces/codex/steady_warm1200_measure600_n110_seed42.jsonl": "027fe40c913d7b8c39a269524ad1894e6cba3334f727d09ece5ac8ca50b24b2f"
-  }
+  },
+  "source_sha256": "670f1ae8325fd70aac6ae6bdf4b03bbbd740d6ac8f2b49d8a02daaee3193fbc3",
+  "tokenizer_sha256": "19564a48c4f71a2a1b937cce34c737a1e662b171c5f5d7edf641a15cd896f07d"
 }

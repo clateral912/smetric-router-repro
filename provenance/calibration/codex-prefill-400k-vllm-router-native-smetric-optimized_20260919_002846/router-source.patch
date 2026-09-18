@@ -1,0 +1,2273 @@
+diff --git a/src/config/types.rs b/src/config/types.rs
+index 39122c4..f52ba6d 100644
+--- a/src/config/types.rs
++++ b/src/config/types.rs
+@@ -278,6 +278,9 @@ pub enum PolicyConfig {
+         #[serde(default = "default_speculative_ttl_ms")]
+         speculative_ttl_ms: u64,
+     },
++
++    #[serde(rename = "smetric")]
++    SMetric(Box<SMetricPolicyConfig>),
+ }
+ 
+ fn default_kv_block_size() -> usize {
+@@ -292,6 +295,58 @@ fn default_speculative_ttl_ms() -> u64 {
+     2000
+ }
+ 
++#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(rename_all = "snake_case")]
++pub enum SMetricGate {
++    Overload,
++    BudgetAttention,
++}
++
++#[derive(Debug, Clone, Serialize, Deserialize)]
++pub struct SMetricPolicyConfig {
++    pub gate: SMetricGate,
++    pub overload_factor: f64,
++    pub hit_ratio: f64,
++    pub block_size: usize,
++    pub overlap_score_credit: f64,
++    pub overlap_score_credit_decay: f64,
++    pub prefill_load_scale: f64,
++    pub active_request_weight: f64,
++    pub budget_gamma: f64,
++    pub budget_base_s: f64,
++    pub budget_input_tokens_per_s: f64,
++    pub drain_tps_fallback: f64,
++    pub drain_window_secs: u64,
++    pub drain_min_samples: usize,
++    pub attention_l_eq: f64,
++    pub eviction_interval_secs: u64,
++    pub max_tree_size: usize,
++}
++
++impl Default for SMetricPolicyConfig {
++    fn default() -> Self {
++        Self {
++            gate: SMetricGate::Overload,
++            overload_factor: 2.0,
++            hit_ratio: 0.5,
++            block_size: 16,
++            overlap_score_credit: 1.0,
++            overlap_score_credit_decay: 0.0,
++            prefill_load_scale: 1.0,
++            active_request_weight: 0.0,
++            budget_gamma: 1.0,
++            budget_base_s: 1.0,
++            budget_input_tokens_per_s: 16_000.0,
++            drain_tps_fallback: 21_400.0,
++            drain_window_secs: 300,
++            drain_min_samples: 8,
++            attention_l_eq: 6_923.0,
++            eviction_interval_secs: 120,
++            max_tree_size: 1 << 26,
++        }
++    }
++}
++
+ impl PolicyConfig {
+     pub fn name(&self) -> &'static str {
+         match self {
+@@ -301,6 +356,7 @@ impl PolicyConfig {
+             PolicyConfig::PowerOfTwo { .. } => "power_of_two",
+             PolicyConfig::ConsistentHash { .. } => "consistent_hash",
+             PolicyConfig::KvAware { .. } => "kv_aware",
++            PolicyConfig::SMetric(_) => "smetric",
+         }
+     }
+ }
+@@ -824,6 +880,7 @@ mod tests {
+             load_check_interval_secs: 60,
+         };
+         assert_eq!(power_of_two.name(), "power_of_two");
++        assert_eq!(PolicyConfig::SMetric(Box::default()).name(), "smetric");
+     }
+ 
+     #[test]
+@@ -853,6 +910,14 @@ mod tests {
+         let json = serde_json::to_string(&power_of_two).unwrap();
+         assert!(json.contains("\"type\":\"power_of_two\""));
+         assert!(json.contains("\"load_check_interval_secs\":60"));
++
++        let smetric = PolicyConfig::SMetric(Box::default());
++        let json = serde_json::to_string(&smetric).unwrap();
++        assert!(json.contains("\"type\":\"smetric\""));
++        assert!(json.contains("\"gate\":\"overload\""));
++        assert!(json.contains("\"overload_factor\":2.0"));
++        let decoded: PolicyConfig = serde_json::from_str(&json).unwrap();
++        assert_eq!(decoded.name(), "smetric");
+     }
+ 
+     #[test]
+diff --git a/src/config/validation.rs b/src/config/validation.rs
+index 4b12e63..d785438 100644
+--- a/src/config/validation.rs
++++ b/src/config/validation.rs
+@@ -261,6 +261,57 @@ impl ConfigValidator {
+                     });
+                 }
+             }
++            PolicyConfig::SMetric(config) => {
++                let non_negative = [
++                    ("overload_factor", config.overload_factor),
++                    ("hit_ratio", config.hit_ratio),
++                    ("overlap_score_credit", config.overlap_score_credit),
++                    (
++                        "overlap_score_credit_decay",
++                        config.overlap_score_credit_decay,
++                    ),
++                    ("prefill_load_scale", config.prefill_load_scale),
++                    ("active_request_weight", config.active_request_weight),
++                    ("budget_gamma", config.budget_gamma),
++                    ("budget_base_s", config.budget_base_s),
++                ];
++                for (field, value) in non_negative {
++                    if !value.is_finite() || value < 0.0 {
++                        return Err(ConfigError::InvalidValue {
++                            field: field.to_string(),
++                            value: value.to_string(),
++                            reason: "Must be finite and non-negative".to_string(),
++                        });
++                    }
++                }
++                let positive = [
++                    (
++                        "budget_input_tokens_per_s",
++                        config.budget_input_tokens_per_s,
++                    ),
++                    ("drain_tps_fallback", config.drain_tps_fallback),
++                    ("attention_l_eq", config.attention_l_eq),
++                ];
++                for (field, value) in positive {
++                    if !value.is_finite() || value <= 0.0 {
++                        return Err(ConfigError::InvalidValue {
++                            field: field.to_string(),
++                            value: value.to_string(),
++                            reason: "Must be finite and positive".to_string(),
++                        });
++                    }
++                }
++                if config.block_size == 0
++                    || config.drain_window_secs == 0
++                    || config.drain_min_samples == 0
++                    || config.eviction_interval_secs == 0
++                    || config.max_tree_size == 0
++                {
++                    return Err(ConfigError::ValidationFailed {
++                        reason: "SMetric integer parameters must be greater than zero".to_string(),
++                    });
++                }
++            }
+         }
+         Ok(())
+     }
+@@ -478,8 +529,19 @@ impl ConfigValidator {
+             });
+         }
+ 
+-        // All policies are now supported for both router types thanks to the unified trait design
+-        // No mode/policy restrictions needed anymore
++        // SMetric currently owns a single regular-worker request lifecycle.
++        if let RoutingMode::VllmPrefillDecode { .. } = &config.mode {
++            let prefill = config.mode.get_prefill_policy(&config.policy);
++            let decode = config.mode.get_decode_policy(&config.policy);
++            if matches!(prefill, PolicyConfig::SMetric(_))
++                || matches!(decode, PolicyConfig::SMetric(_))
++            {
++                return Err(ConfigError::IncompatibleConfig {
++                    reason: "SMetric currently requires regular routing mode so Router can track one worker through the complete request lifecycle"
++                        .to_string(),
++                });
++            }
++        }
+ 
+         // Check if service discovery is enabled for worker count validation
+         let has_service_discovery = config.discovery.as_ref().is_some_and(|d| d.enabled);
+@@ -720,6 +782,23 @@ mod tests {
+         assert!(result.is_ok());
+     }
+ 
++    #[test]
++    fn test_reject_smetric_in_pd_mode_without_dual_lifecycle_accounting() {
++        let config = RouterConfig::new(
++            RoutingMode::VllmPrefillDecode {
++                prefill_urls: vec![("http://prefill:8000".to_string(), None)],
++                decode_urls: vec!["http://decode:8001".to_string()],
++                prefill_policy: None,
++                decode_policy: None,
++                discovery_address: None,
++                kv_events: None,
++            },
++            PolicyConfig::SMetric(Box::default()),
++        );
++        let error = config.validate().unwrap_err();
++        assert!(error.to_string().contains("regular routing mode"));
++    }
++
+     #[test]
+     fn test_validate_cache_aware_with_pd_mode() {
+         // CacheAware with PD mode is now supported
+diff --git a/src/core/worker_registry.rs b/src/core/worker_registry.rs
+index 845ebc2..92b99a4 100644
+--- a/src/core/worker_registry.rs
++++ b/src/core/worker_registry.rs
+@@ -364,10 +364,6 @@ impl WorkerRegistry {
+             let mut interval =
+                 tokio::time::interval(tokio::time::Duration::from_secs(check_interval_secs));
+ 
+-            // Counter for periodic load reset (every 10 health check cycles)
+-            let mut check_count = 0u64;
+-            const LOAD_RESET_INTERVAL: u64 = 10;
+-
+             loop {
+                 interval.tick().await;
+ 
+@@ -388,14 +384,12 @@ impl WorkerRegistry {
+                     let _ = worker.check_health_async().await; // Use async version directly
+                 }
+ 
+-                // Reset loads periodically
+-                check_count += 1;
+-                if check_count.is_multiple_of(LOAD_RESET_INTERVAL) {
+-                    tracing::debug!("Resetting worker loads (cycle {})", check_count);
+-                    for worker in &workers {
+-                        worker.reset_load();
+-                    }
+-                }
++                // load_counter counts active routed requests. Clearing it on a
++                // timer loses ownership of requests that span a health-check
++                // cycle; their later decrements can then consume counts that
++                // belong to newer requests. Each request path is responsible
++                // for its matching decrement, so health checks must not mutate
++                // this counter.
+             }
+         });
+ 
+diff --git a/src/main.rs b/src/main.rs
+index 91ee80f..8ba471e 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -123,7 +123,7 @@ struct CliArgs {
+     worker_urls: Vec<String>,
+ 
+     /// Load balancing policy to use
+-    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware"])]
++    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
+     policy: String,
+ 
+     /// Enable PD (Prefill-Decode) disaggregated mode
+@@ -144,11 +144,11 @@ struct CliArgs {
+     decode: Vec<String>,
+ 
+     /// Specific policy for prefill nodes in PD mode
+-    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware"])]
++    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
+     prefill_policy: Option<String>,
+ 
+     /// Specific policy for decode nodes in PD mode
+-    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware"])]
++    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
+     decode_policy: Option<String>,
+ 
+     /// Timeout in seconds for worker startup
+@@ -179,6 +179,54 @@ struct CliArgs {
+     #[arg(long, default_value_t = 67108864)] // 2^26
+     max_tree_size: usize,
+ 
++    /// SMetric gate: overload is the ready-to-use default; budget_attention
++    /// enables online drain-rate calibration.
++    #[arg(long, default_value = "overload", value_parser = ["overload", "budget_attention"])]
++    smetric_gate: String,
++
++    #[arg(long, default_value_t = 2.0)]
++    smetric_overload_factor: f64,
++
++    #[arg(long, default_value_t = 0.5)]
++    smetric_hit_ratio: f64,
++
++    #[arg(long, default_value_t = 16)]
++    smetric_block_size: usize,
++
++    #[arg(long, default_value_t = 1.0)]
++    smetric_overlap_score_credit: f64,
++
++    #[arg(long, default_value_t = 0.0)]
++    smetric_overlap_score_credit_decay: f64,
++
++    #[arg(long, default_value_t = 1.0)]
++    smetric_prefill_load_scale: f64,
++
++    #[arg(long, default_value_t = 0.0)]
++    smetric_active_request_weight: f64,
++
++    #[arg(long, default_value_t = 1.0)]
++    smetric_budget_gamma: f64,
++
++    #[arg(long, default_value_t = 1.0)]
++    smetric_budget_base_s: f64,
++
++    #[arg(long, default_value_t = 16000.0)]
++    smetric_budget_input_tokens_per_s: f64,
++
++    /// Cold-start rate for budget_attention, in attention work units/s.
++    #[arg(long, default_value_t = 21400.0)]
++    smetric_drain_tps_fallback: f64,
++
++    #[arg(long, default_value_t = 300)]
++    smetric_drain_window_secs: u64,
++
++    #[arg(long, default_value_t = 8)]
++    smetric_drain_min_samples: usize,
++
++    #[arg(long, default_value_t = 6923.0)]
++    smetric_attention_l_eq: f64,
++
+     /// Maximum payload size in bytes
+     #[arg(long, default_value_t = 536870912)] // 512MB
+     max_payload_size: usize,
+@@ -468,6 +516,31 @@ impl CliArgs {
+                 enable_speculative: self.kv_speculative_indexing,
+                 speculative_ttl_ms: self.kv_speculative_ttl_ms,
+             },
++            "smetric" => {
++                PolicyConfig::SMetric(Box::new(vllm_router_rs::config::SMetricPolicyConfig {
++                    gate: if self.smetric_gate == "budget_attention" {
++                        vllm_router_rs::config::SMetricGate::BudgetAttention
++                    } else {
++                        vllm_router_rs::config::SMetricGate::Overload
++                    },
++                    overload_factor: self.smetric_overload_factor,
++                    hit_ratio: self.smetric_hit_ratio,
++                    block_size: self.smetric_block_size,
++                    overlap_score_credit: self.smetric_overlap_score_credit,
++                    overlap_score_credit_decay: self.smetric_overlap_score_credit_decay,
++                    prefill_load_scale: self.smetric_prefill_load_scale,
++                    active_request_weight: self.smetric_active_request_weight,
++                    budget_gamma: self.smetric_budget_gamma,
++                    budget_base_s: self.smetric_budget_base_s,
++                    budget_input_tokens_per_s: self.smetric_budget_input_tokens_per_s,
++                    drain_tps_fallback: self.smetric_drain_tps_fallback,
++                    drain_window_secs: self.smetric_drain_window_secs,
++                    drain_min_samples: self.smetric_drain_min_samples,
++                    attention_l_eq: self.smetric_attention_l_eq,
++                    eviction_interval_secs: self.eviction_interval,
++                    max_tree_size: self.max_tree_size,
++                }))
++            }
+             _ => PolicyConfig::RoundRobin, // Fallback
+         }
+     }
+diff --git a/src/policies/cache_aware.rs b/src/policies/cache_aware.rs
+index 0894e3f..1e16ced 100644
+--- a/src/policies/cache_aware.rs
++++ b/src/policies/cache_aware.rs
+@@ -459,7 +459,13 @@ impl LoadBalancingPolicy for CacheAwarePolicy {
+         true // Cache-aware policy needs request text for cache affinity
+     }
+ 
+-    fn on_request_complete(&self, worker_url: &str, success: bool) {
++    fn on_request_complete(
++        &self,
++        worker_url: &str,
++        _reservation_id: Option<u64>,
++        success: bool,
++        _elapsed: Duration,
++    ) {
+         // Could track success rates per worker for more intelligent routing
+         if !success {
+             // Optionally reduce affinity for failed requests
+@@ -471,6 +477,10 @@ impl LoadBalancingPolicy for CacheAwarePolicy {
+         }
+     }
+ 
++    fn tracks_worker_load(&self) -> bool {
++        true
++    }
++
+     fn as_any(&self) -> &dyn std::any::Any {
+         self
+     }
+diff --git a/src/policies/factory.rs b/src/policies/factory.rs
+index d14a5fd..5562486 100644
+--- a/src/policies/factory.rs
++++ b/src/policies/factory.rs
+@@ -2,7 +2,7 @@
+ 
+ use super::{
+     CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
+-    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy,
++    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
+ };
+ use crate::config::PolicyConfig;
+ use std::sync::Arc;
+@@ -53,6 +53,9 @@ impl PolicyFactory {
+                 );
+                 Arc::new(RoundRobinPolicy::new())
+             }
++            PolicyConfig::SMetric(config) => {
++                Arc::new(SMetricPolicy::with_config((**config).clone()))
++            }
+         }
+     }
+ 
+@@ -66,6 +69,7 @@ impl PolicyFactory {
+             "consistent_hash" | "consistenthash" => Some(Arc::new(ConsistentHashPolicy::new())),
+             // "kv_aware" is not available via name lookup because
+             // it requires external dependencies (index, tokenizer).
++            "smetric" => Some(Arc::new(SMetricPolicy::new())),
+             _ => None,
+         }
+     }
+@@ -119,6 +123,10 @@ mod tests {
+         assert!(PolicyFactory::create_by_name("CacheAware").is_some());
+         assert!(PolicyFactory::create_by_name("consistent_hash").is_some());
+         assert!(PolicyFactory::create_by_name("ConsistentHash").is_some());
++        assert_eq!(
++            PolicyFactory::create_by_name("smetric").unwrap().name(),
++            "smetric"
++        );
+         assert!(PolicyFactory::create_by_name("unknown").is_none());
+     }
+ }
+diff --git a/src/policies/mod.rs b/src/policies/mod.rs
+index 11eb25d..9100b94 100644
+--- a/src/policies/mod.rs
++++ b/src/policies/mod.rs
+@@ -16,6 +16,7 @@ mod power_of_two;
+ mod random;
+ mod registry;
+ mod round_robin;
++mod smetric;
+ 
+ pub use cache_aware::CacheAwarePolicy;
+ pub use consistent_hash::ConsistentHashPolicy;
+@@ -25,6 +26,7 @@ pub use power_of_two::PowerOfTwoPolicy;
+ pub use random::RandomPolicy;
+ pub use registry::PolicyRegistry;
+ pub use round_robin::RoundRobinPolicy;
++pub use smetric::{SMetricConfig, SMetricPolicy};
+ 
+ /// HTTP headers passed to policies for routing decisions
+ /// Key is lowercase header name, value is header value
+@@ -87,14 +89,41 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
+         Some((prefill_idx, decode_idx))
+     }
+ 
+-    /// Update policy state after request completion
+-    ///
+-    /// This is called when a request completes (successfully or not) to allow
+-    /// policies to update their internal state.
+-    fn on_request_complete(&self, _worker_url: &str, _success: bool) {
++    /// Reserve policy-owned work after a worker has been selected.
++    fn on_request_start(
++        &self,
++        _worker_url: &str,
++        _request_text: Option<&str>,
++        _headers: Option<&RequestHeaders>,
++    ) -> Option<u64> {
++        None
++    }
++
++    /// Observe the first response body bytes for an in-flight request.
++    fn on_request_first_response(
++        &self,
++        _worker_url: &str,
++        _reservation_id: Option<u64>,
++        _elapsed: std::time::Duration,
++    ) {
++    }
++
++    /// Release policy-owned work after a request completes.
++    fn on_request_complete(
++        &self,
++        _worker_url: &str,
++        _reservation_id: Option<u64>,
++        _success: bool,
++        _elapsed: std::time::Duration,
++    ) {
+         // Default: no-op for stateless policies
+     }
+ 
++    /// Whether Router should maintain its generic in-flight request count.
++    fn tracks_worker_load(&self) -> bool {
++        false
++    }
++
+     /// Get policy name for metrics and debugging
+     fn name(&self) -> &'static str;
+ 
+@@ -137,6 +166,9 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
+     fn init_workers(&self, _workers: &[Arc<dyn Worker>]) {
+         // Default: no-op for policies that don't need initialization
+     }
++
++    /// Remove a worker from policy-owned state.
++    fn remove_worker_by_url(&self, _url: &str) {}
+ }
+ 
+ /// Configuration for cache-aware policy
+diff --git a/src/policies/registry.rs b/src/policies/registry.rs
+index b082adb..4ffacb1 100644
+--- a/src/policies/registry.rs
++++ b/src/policies/registry.rs
+@@ -6,7 +6,7 @@
+ /// When the last worker of a model is removed, the policy mapping is cleaned up.
+ use super::{
+     CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
+-    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy,
++    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
+ };
+ use crate::config::types::PolicyConfig;
+ use std::collections::HashMap;
+@@ -177,6 +177,7 @@ impl PolicyRegistry {
+             "random" => Arc::new(RandomPolicy::new()),
+             "cache_aware" => Arc::new(CacheAwarePolicy::new()),
+             "power_of_two" => Arc::new(PowerOfTwoPolicy::new()),
++            "smetric" => Arc::new(SMetricPolicy::new()),
+             _ => {
+                 warn!("Unknown policy type '{}', using default", policy_type);
+                 self.get_default_policy()
+@@ -219,6 +220,9 @@ impl PolicyRegistry {
+                 );
+                 Arc::new(RoundRobinPolicy::new())
+             }
++            PolicyConfig::SMetric(config) => {
++                Arc::new(SMetricPolicy::with_config((**config).clone()))
++            }
+         }
+     }
+ 
+@@ -313,6 +317,9 @@ mod tests {
+         assert_eq!(mappings.get("llama-3").unwrap(), "cache_aware");
+         assert_eq!(mappings.get("gpt-4").unwrap(), "random");
+ 
++        let policy4 = registry.on_worker_added("qwen", Some("smetric"));
++        assert_eq!(policy4.name(), "smetric");
++
+         // Check worker counts
+         let counts = registry.get_worker_counts();
+         assert_eq!(*counts.get("llama-3").unwrap(), 2);
+diff --git a/src/policies/smetric.rs b/src/policies/smetric.rs
+new file mode 100644
+index 0000000..1d5b03e
+--- /dev/null
++++ b/src/policies/smetric.rs
+@@ -0,0 +1,1060 @@
++//! Native SMetric routing policy.
++//!
++//! This implementation deliberately uses only state observable by the router:
++//! request text, the router's approximate prefix tree, and request lifecycle
++//! timing. It does not query workers or any external state store.
++
++use super::{get_healthy_worker_indices, normalize_model_key, LoadBalancingPolicy, RequestHeaders};
++use crate::config::{SMetricGate, SMetricPolicyConfig};
++use crate::core::Worker;
++use crate::kv_index::{KVBlockIndex, PrefixScorer};
++use crate::metrics::RouterMetrics;
++use crate::tokenizer::traits::Encoder;
++use crate::tree::Tree;
++use dashmap::DashMap;
++use std::collections::{HashMap, VecDeque};
++use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
++use std::sync::{Arc, Mutex};
++use std::time::{Duration, Instant};
++use tracing::debug;
++
++const MAX_SESSION_LEASES: usize = 100_000;
++
++#[derive(Debug, Clone)]
++struct SessionLease {
++    worker_url: String,
++    last_stuck: bool,
++    last_seen: Instant,
++}
++
++pub type SMetricConfig = SMetricPolicyConfig;
++
++#[derive(Clone)]
++struct ExactCacheState {
++    index: Arc<KVBlockIndex>,
++    tokenizer: Arc<dyn Encoder>,
++    block_size: usize,
++}
++
++impl std::fmt::Debug for ExactCacheState {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        f.debug_struct("ExactCacheState")
++            .field("index", &self.index)
++            .field("block_size", &self.block_size)
++            .finish()
++    }
++}
++
++#[derive(Debug)]
++struct Reservation {
++    started_at: Instant,
++    input_units: f64,
++    prefill_units: f64,
++    work_units: f64,
++    rate_recorded: bool,
++    response_started: bool,
++}
++
++#[derive(Debug, Default)]
++struct WorkerState {
++    pending_prefill_units: f64,
++    decode_context_units: f64,
++    pending_work: f64,
++    active_requests: usize,
++    reservations: HashMap<u64, Reservation>,
++    /// Completed prefill observations: (completion time, start, effective work).
++    /// The estimator merges overlapping [start, completion] intervals, so
++    /// concurrent requests do not double-count worker busy wall time and idle
++    /// gaps do not inflate the denominator.
++    drain_samples: VecDeque<(Instant, Instant, f64)>,
++}
++
++#[derive(Debug)]
++pub struct SMetricPolicy {
++    config: SMetricConfig,
++    trees: DashMap<String, Arc<Tree>>,
++    worker_models: DashMap<String, String>,
++    state: Mutex<HashMap<String, WorkerState>>,
++    rr: AtomicUsize,
++    next_reservation: AtomicU64,
++    last_eviction: Mutex<Instant>,
++    session_leases: Mutex<HashMap<String, SessionLease>>,
++    exact_cache: Option<ExactCacheState>,
++}
++
++impl SMetricPolicy {
++    pub fn new() -> Self {
++        Self::with_config(SMetricConfig::default())
++    }
++
++    pub fn with_config(config: SMetricConfig) -> Self {
++        Self {
++            config,
++            trees: DashMap::new(),
++            worker_models: DashMap::new(),
++            state: Mutex::new(HashMap::new()),
++            rr: AtomicUsize::new(0),
++            next_reservation: AtomicU64::new(1),
++            last_eviction: Mutex::new(Instant::now()),
++            session_leases: Mutex::new(HashMap::new()),
++            exact_cache: None,
++        }
++    }
++
++    /// Attach the same event-fed exact KV index used by cache_aware. When the
++    /// index has no positive evidence, preserve the historical Tree fallback.
++    pub fn with_exact_cache(
++        config: SMetricConfig,
++        index: Arc<KVBlockIndex>,
++        tokenizer: Arc<dyn Encoder>,
++        block_size: usize,
++    ) -> Self {
++        let mut policy = Self::with_config(config);
++        policy.exact_cache = Some(ExactCacheState {
++            index,
++            tokenizer,
++            block_size,
++        });
++        policy
++    }
++
++    fn token_ids_for_exact_cache(text: &str) -> Option<Vec<u32>> {
++        let encoded = text.strip_prefix("\u{10ffff}\u{10fffe}")?;
++        let mut ids = Vec::with_capacity(encoded.chars().count());
++        for scalar in encoded.chars().map(u32::from) {
++            if scalar == 0x10fffd {
++                return None;
++            }
++            ids.push(if scalar >= 0xe000 {
++                scalar - 0x800
++            } else {
++                scalar
++            });
++        }
++        Some(ids)
++    }
++
++    /// Return request token count and exact cached-token counts by worker.
++    /// A present result with all-zero scores means the event index has no
++    /// positive evidence and callers should use the approximate Tree fallback.
++    fn exact_cache_scores(&self, text: &str) -> Option<(usize, HashMap<String, usize>)> {
++        let exact = self.exact_cache.as_ref()?;
++        let token_ids = Self::token_ids_for_exact_cache(text).or_else(|| {
++            exact
++                .tokenizer
++                .encode(text)
++                .ok()
++                .map(|encoding| encoding.token_ids().to_vec())
++        })?;
++        let scored = PrefixScorer::new(&exact.index).score_tokens(&token_ids, exact.block_size);
++        let cached = scored
++            .scores
++            .into_iter()
++            .map(|(worker, blocks)| {
++                (
++                    worker,
++                    blocks.saturating_mul(exact.block_size).min(token_ids.len()),
++                )
++            })
++            .collect();
++        Some((token_ids.len(), cached))
++    }
++
++    #[inline]
++    fn work_units(&self, uncached: usize, input: usize) -> f64 {
++        let n = uncached as f64;
++        let l = input as f64;
++        n + n * (l - n / 2.0).max(0.0) / self.config.attention_l_eq
++    }
++
++    fn choose_tie(&self, candidates: &[usize]) -> Option<usize> {
++        if candidates.is_empty() {
++            return None;
++        }
++        let n = self.rr.fetch_add(1, Ordering::Relaxed);
++        Some(candidates[n % candidates.len()])
++    }
++
++    fn maybe_evict(&self) {
++        if self.config.eviction_interval_secs == 0 {
++            return;
++        }
++        let mut last = self.last_eviction.lock().unwrap();
++        if last.elapsed() < Duration::from_secs(self.config.eviction_interval_secs) {
++            return;
++        }
++        for tree in self.trees.iter() {
++            tree.value().evict_tenant_by_size(self.config.max_tree_size);
++        }
++        *last = Instant::now();
++    }
++
++    fn estimated_rate(&self, worker: &mut WorkerState, now: Instant) -> f64 {
++        let window = Duration::from_secs(self.config.drain_window_secs);
++        let window_start = now.checked_sub(window).unwrap_or(now);
++        worker
++            .drain_samples
++            .retain(|(completion, _, _)| *completion >= window_start && *completion <= now);
++        if worker.drain_samples.len() < self.config.drain_min_samples {
++            return self.config.drain_tps_fallback;
++        }
++        let work: f64 = worker.drain_samples.iter().map(|(_, _, work)| *work).sum();
++        let mut intervals: Vec<(Instant, Instant)> = worker
++            .drain_samples
++            .iter()
++            .map(|(completion, start, _)| {
++                (
++                    std::cmp::max(*start, window_start),
++                    std::cmp::min(*completion, now),
++                )
++            })
++            .collect();
++        intervals.sort_by_key(|(start, _)| *start);
++        let mut busy_secs = 0.0;
++        let mut merged: Option<(Instant, Instant)> = None;
++        for (start, end) in intervals {
++            if end <= start {
++                continue;
++            }
++            if let Some((merged_start, merged_end)) = merged {
++                if start <= merged_end {
++                    merged = Some((merged_start, merged_end.max(end)));
++                } else {
++                    busy_secs += merged_end.duration_since(merged_start).as_secs_f64();
++                    merged = Some((start, end));
++                }
++            } else {
++                merged = Some((start, end));
++            }
++        }
++        if let Some((start, end)) = merged {
++            busy_secs += end.duration_since(start).as_secs_f64();
++        }
++        if !work.is_finite() || !busy_secs.is_finite() || busy_secs <= 0.0 {
++            return self.config.drain_tps_fallback;
++        }
++        work / busy_secs
++    }
++
++    /// Return the aggregate rate and a relative uncertainty estimate derived
++    /// from the same completed observations. This uncertainty is used only
++    /// for session-lease hysteresis around the budget boundary.
++    fn estimated_rate_with_uncertainty(
++        &self,
++        worker: &mut WorkerState,
++        now: Instant,
++    ) -> (f64, f64) {
++        let rate = self.estimated_rate(worker, now);
++        if worker.drain_samples.len() < self.config.drain_min_samples || rate <= 0.0 {
++            return (rate, 0.0);
++        }
++        let mut rates: Vec<f64> = worker
++            .drain_samples
++            .iter()
++            .filter_map(|(completion, start, work)| {
++                let secs = completion.duration_since(*start).as_secs_f64();
++                (secs > 0.0 && work.is_finite()).then_some(*work / secs)
++            })
++            .collect();
++        if rates.len() < self.config.drain_min_samples {
++            return (rate, 0.0);
++        }
++        rates.sort_by(f64::total_cmp);
++        let median = rates[rates.len() / 2];
++        let mut deviations: Vec<f64> = rates.iter().map(|value| (value - median).abs()).collect();
++        deviations.sort_by(f64::total_cmp);
++        let mad = deviations[deviations.len() / 2];
++        if !median.is_finite() || median <= 0.0 || !mad.is_finite() {
++            return (rate, 0.0);
++        }
++        // 1.96 is the conventional two-sided 95% normal quantile; 1.4826
++        // makes MAD consistent with standard deviation for normal noise.
++        let relative = 1.96 * 1.4826 * mad / median / (rates.len() as f64).sqrt();
++        (rate, relative.max(0.0))
++    }
++
++    fn session_id(headers: Option<&RequestHeaders>) -> Option<&str> {
++        headers.and_then(|values| values.get("x-session-id").map(String::as_str))
++    }
++
++    fn leased_worker(
++        &self,
++        session_id: &str,
++        workers: &[Arc<dyn Worker>],
++        now: Instant,
++    ) -> Option<(usize, bool)> {
++        let mut leases = self.session_leases.lock().unwrap();
++        let ttl = Duration::from_secs(self.config.drain_window_secs);
++        leases.retain(|_, lease| now.duration_since(lease.last_seen) <= ttl);
++        let lease = leases.get_mut(session_id)?;
++        lease.last_seen = now;
++        workers
++            .iter()
++            .position(|worker| worker.url() == lease.worker_url)
++            .map(|idx| (idx, lease.last_stuck))
++    }
++
++    fn remember_lease(&self, session_id: &str, worker_url: &str, last_stuck: bool, now: Instant) {
++        let mut leases = self.session_leases.lock().unwrap();
++        let ttl = Duration::from_secs(self.config.drain_window_secs);
++        leases.retain(|_, lease| now.duration_since(lease.last_seen) <= ttl);
++        if !leases.contains_key(session_id) && leases.len() >= MAX_SESSION_LEASES {
++            if let Some(oldest) = leases
++                .iter()
++                .min_by_key(|(_, lease)| lease.last_seen)
++                .map(|(key, _)| key.clone())
++            {
++                leases.remove(&oldest);
++            }
++        }
++        leases.insert(
++            session_id.to_string(),
++            SessionLease {
++                worker_url: worker_url.to_string(),
++                last_stuck,
++                last_seen: now,
++            },
++        );
++    }
++
++    #[inline]
++    fn budget_accepts(predicted: f64, budget: f64, uncertainty: f64, leased_stuck: bool) -> bool {
++        predicted <= budget || (leased_stuck && predicted <= budget * (1.0 + uncertainty))
++    }
++
++    #[cfg(test)]
++    fn snapshot(&self, worker_url: &str) -> (f64, f64, usize, usize) {
++        let state = self.state.lock().unwrap();
++        let worker = state.get(worker_url).unwrap();
++        (
++            worker.pending_prefill_units + worker.decode_context_units,
++            worker.pending_work,
++            worker.active_requests,
++            worker.drain_samples.len(),
++        )
++    }
++
++    #[cfg(test)]
++    fn measured_rate(&self, worker_url: &str) -> f64 {
++        let mut state = self.state.lock().unwrap();
++        self.estimated_rate(state.get_mut(worker_url).unwrap(), Instant::now())
++    }
++}
++
++impl Default for SMetricPolicy {
++    fn default() -> Self {
++        Self::new()
++    }
++}
++
++impl LoadBalancingPolicy for SMetricPolicy {
++    fn select_worker_with_headers(
++        &self,
++        workers: &[Arc<dyn Worker>],
++        request_text: Option<&str>,
++        headers: Option<&RequestHeaders>,
++    ) -> Option<usize> {
++        let healthy = get_healthy_worker_indices(workers);
++        if healthy.is_empty() {
++            return None;
++        }
++        let text = request_text.unwrap_or("");
++        let exact = self.exact_cache_scores(text);
++        let exact_has_match = exact
++            .as_ref()
++            .is_some_and(|(_, scores)| scores.values().any(|score| *score > 0));
++        let input = exact
++            .as_ref()
++            .map(|(tokens, _)| *tokens)
++            .unwrap_or_else(|| text.chars().count());
++        let model = normalize_model_key(workers[healthy[0]].model_id());
++        let tree = self.trees.get(model).map(|v| Arc::clone(v.value()));
++        let matched = tree.as_ref().map(|t| t.prefix_match_with_counts(text));
++        let (home, hit) = if exact_has_match {
++            healthy
++                .iter()
++                .copied()
++                .map(|idx| {
++                    let score = exact
++                        .as_ref()
++                        .and_then(|(_, scores)| scores.get(workers[idx].url()))
++                        .copied()
++                        .unwrap_or(0);
++                    (idx, score)
++                })
++                .max_by_key(|(_, score)| *score)
++                .map_or((None, 0), |(idx, score)| (Some(idx), score))
++        } else {
++            let home = matched.as_ref().and_then(|m| {
++                healthy
++                    .iter()
++                    .copied()
++                    .find(|&idx| workers[idx].url() == m.tenant.as_ref())
++            });
++            let hit = matched
++                .as_ref()
++                .map_or(0, |m| m.matched_char_count.min(input));
++            (home, hit)
++        };
++        let session_id = Self::session_id(headers);
++        let lease = session_id.and_then(|id| self.leased_worker(id, workers, Instant::now()));
++        let leased_home = lease.map(|(idx, _)| idx);
++        let leased_stuck = lease.is_some_and(|(_, stuck)| stuck);
++
++        let mut states = self.state.lock().unwrap();
++        for &idx in &healthy {
++            states.entry(workers[idx].url().to_string()).or_default();
++        }
++
++        let load = |state: &WorkerState| {
++            self.config.prefill_load_scale
++                * (state.pending_prefill_units + state.decode_context_units)
++                / self.config.block_size as f64
++                + self.config.active_request_weight * state.active_requests as f64
++        };
++        let mean_load = healthy
++            .iter()
++            .map(|&idx| load(states.get(workers[idx].url()).unwrap()))
++            .sum::<f64>()
++            / healthy.len() as f64;
++
++        let explicitly_first = headers
++            .and_then(|h| h.get("x-session-turn"))
++            .and_then(|v| v.parse::<u64>().ok())
++            .is_some_and(|turn| turn <= 1);
++        let hit_ok = input > 0 && (hit as f64) > self.config.hit_ratio * input as f64;
++
++        // Keep the budget-gate inputs in the decision log so benchmark runs
++        // can explain a stick/fallback choice without consulting worker
++        // internals. These are router-observed values only.
++        let mut budget_observation: Option<(f64, f64, f64, f64, f64, f64)> = None;
++        let stick = home.filter(|&home_idx| {
++            if explicitly_first || !hit_ok {
++                return false;
++            }
++            let home_state = states.get_mut(workers[home_idx].url()).unwrap();
++            match self.config.gate {
++                SMetricGate::Overload => {
++                    let home_load = load(home_state);
++                    home_load <= self.config.overload_factor * mean_load
++                        || (home_load == 0.0 && mean_load == 0.0)
++                }
++                SMetricGate::BudgetAttention => {
++                    let own = self.work_units(input.saturating_sub(hit), input);
++                    let queued = home_state.pending_work + own;
++                    let (rate, uncertainty) =
++                        self.estimated_rate_with_uncertainty(home_state, Instant::now());
++                    let budget = self.config.budget_gamma
++                        * (self.config.budget_base_s
++                            + input as f64 / self.config.budget_input_tokens_per_s);
++                    let predicted = queued / rate;
++                    budget_observation = Some((queued, own, rate, predicted, budget, uncertainty));
++                    Self::budget_accepts(
++                        predicted,
++                        budget,
++                        uncertainty,
++                        leased_stuck && leased_home == Some(home_idx),
++                    )
++                }
++            }
++        });
++
++        let selected = if let Some(idx) = stick {
++            idx
++        } else {
++            // Native Dynamo-style fallback. The approximate tree provides a
++            // device-prefix credit for the best matching worker. Host credit
++            // is zero because Router has no native host-cache observation.
++            let min_pending = healthy
++                .iter()
++                .map(|&idx| {
++                    let state = states.get(workers[idx].url()).unwrap();
++                    state.pending_prefill_units + state.decode_context_units
++                })
++                .fold(f64::INFINITY, f64::min);
++            let request_blocks = (input as f64 / self.config.block_size as f64).max(1.0);
++            let mut scores = Vec::with_capacity(healthy.len());
++            for &idx in &healthy {
++                let worker = states.get(workers[idx].url()).unwrap();
++                let current_load = worker.pending_prefill_units + worker.decode_context_units;
++                let excess_blocks =
++                    (current_load - min_pending).max(0.0) / self.config.block_size as f64;
++                let decay = if self.config.overlap_score_credit_decay > 0.0 {
++                    1.0 / (1.0
++                        + self.config.overlap_score_credit_decay * excess_blocks / request_blocks)
++                } else {
++                    1.0
++                };
++                let device_hit = if exact_has_match {
++                    exact
++                        .as_ref()
++                        .and_then(|(_, scores)| scores.get(workers[idx].url()))
++                        .copied()
++                        .unwrap_or(0)
++                } else if Some(idx) == home {
++                    hit
++                } else {
++                    0
++                };
++                let raw_blocks = (current_load + input as f64) / self.config.block_size as f64;
++                let credit = self.config.overlap_score_credit * decay * device_hit as f64
++                    / self.config.block_size as f64;
++                let score = self.config.prefill_load_scale * (raw_blocks - credit).max(0.0)
++                    + self.config.active_request_weight * worker.active_requests as f64;
++                scores.push((idx, score));
++            }
++            let best = scores.iter().map(|(_, s)| *s).fold(f64::INFINITY, f64::min);
++            let tied: Vec<usize> = scores
++                .into_iter()
++                .filter_map(|(idx, score)| (score == best).then_some(idx))
++                .collect();
++            self.choose_tie(&tied)?
++        };
++        drop(states);
++
++        if let Some(session_id) = session_id {
++            self.remember_lease(
++                session_id,
++                workers[selected].url(),
++                stick.is_some(),
++                Instant::now(),
++            );
++        }
++        workers[selected].increment_processed();
++        RouterMetrics::record_processed_request(workers[selected].url());
++        RouterMetrics::record_policy_decision(self.name(), workers[selected].url());
++        debug!(
++            worker = workers[selected].url(),
++            matched_units = hit,
++            input_units = input,
++            stuck = stick.is_some(),
++            exact_kv = exact_has_match,
++            home = home.map(|idx| workers[idx].url()),
++            queued_work = budget_observation.map(|v| v.0),
++            own_work = budget_observation.map(|v| v.1),
++            estimated_rate = budget_observation.map(|v| v.2),
++            predicted_s = budget_observation.map(|v| v.3),
++            budget_s = budget_observation.map(|v| v.4),
++            rate_uncertainty = budget_observation.map(|v| v.5),
++            stick = stick.is_some(),
++            "SMetric decision"
++        );
++        Some(selected)
++    }
++
++    fn on_request_start(
++        &self,
++        worker_url: &str,
++        request_text: Option<&str>,
++        _headers: Option<&RequestHeaders>,
++    ) -> Option<u64> {
++        let text = request_text.unwrap_or("");
++        let exact = self.exact_cache_scores(text);
++        let exact_has_match = exact
++            .as_ref()
++            .is_some_and(|(_, scores)| scores.values().any(|score| *score > 0));
++        let input = exact
++            .as_ref()
++            .map(|(tokens, _)| *tokens)
++            .unwrap_or_else(|| text.chars().count());
++        let model = self.worker_models.get(worker_url)?.clone();
++        let tree = self.trees.get(model.as_str())?.clone();
++        let matched = tree.prefix_match_with_counts(text);
++        let hit = if exact_has_match {
++            exact
++                .as_ref()
++                .and_then(|(_, scores)| scores.get(worker_url))
++                .copied()
++                .unwrap_or(0)
++        } else if matched.tenant.as_ref() == worker_url {
++            matched.matched_char_count.min(input)
++        } else {
++            0
++        };
++        let work = self.work_units(input.saturating_sub(hit), input);
++        let prefill = input.saturating_sub(hit) as f64;
++        let reservation_id = self.next_reservation.fetch_add(1, Ordering::Relaxed);
++
++        let mut state = self.state.lock().unwrap();
++        let worker = state.entry(worker_url.to_string()).or_default();
++        worker.pending_prefill_units += prefill;
++        worker.pending_work += work;
++        worker.active_requests += 1;
++        worker.reservations.insert(
++            reservation_id,
++            Reservation {
++                started_at: Instant::now(),
++                input_units: input as f64,
++                prefill_units: prefill,
++                work_units: work,
++                rate_recorded: false,
++                response_started: false,
++            },
++        );
++        drop(state);
++
++        tree.insert(text, worker_url);
++        self.maybe_evict();
++        Some(reservation_id)
++    }
++
++    fn on_request_first_response(
++        &self,
++        worker_url: &str,
++        reservation_id: Option<u64>,
++        elapsed: Duration,
++    ) {
++        let Some(id) = reservation_id else { return };
++        let mut state = self.state.lock().unwrap();
++        let Some(worker) = state.get_mut(worker_url) else {
++            return;
++        };
++        let sample = worker.reservations.get_mut(&id).and_then(|reservation| {
++            if reservation.response_started {
++                return None;
++            }
++            reservation.response_started = true;
++            worker.pending_prefill_units =
++                (worker.pending_prefill_units - reservation.prefill_units).max(0.0);
++            worker.pending_work = (worker.pending_work - reservation.work_units).max(0.0);
++            worker.decode_context_units += reservation.input_units;
++            if reservation.rate_recorded || reservation.work_units <= 0.0 || elapsed.is_zero() {
++                return None;
++            }
++            reservation.rate_recorded = true;
++            Some((reservation.started_at, reservation.work_units))
++        });
++        if let Some((started_at, work)) = sample.filter(|(_, work)| work.is_finite() && *work > 0.0)
++        {
++            worker
++                .drain_samples
++                .push_back((Instant::now(), started_at, work));
++        }
++    }
++
++    fn on_request_complete(
++        &self,
++        worker_url: &str,
++        reservation_id: Option<u64>,
++        success: bool,
++        elapsed: Duration,
++    ) {
++        let Some(id) = reservation_id else { return };
++        if success {
++            self.on_request_first_response(worker_url, Some(id), elapsed);
++        }
++        let mut state = self.state.lock().unwrap();
++        let Some(worker) = state.get_mut(worker_url) else {
++            return;
++        };
++        if let Some(reservation) = worker.reservations.remove(&id) {
++            if reservation.response_started {
++                worker.decode_context_units =
++                    (worker.decode_context_units - reservation.input_units).max(0.0);
++            } else {
++                worker.pending_prefill_units =
++                    (worker.pending_prefill_units - reservation.prefill_units).max(0.0);
++                worker.pending_work = (worker.pending_work - reservation.work_units).max(0.0);
++            }
++            worker.active_requests = worker.active_requests.saturating_sub(1);
++        }
++    }
++
++    fn name(&self) -> &'static str {
++        "smetric"
++    }
++
++    fn needs_request_text(&self) -> bool {
++        true
++    }
++
++    fn needs_headers(&self) -> bool {
++        true
++    }
++
++    fn tracks_worker_load(&self) -> bool {
++        true
++    }
++
++    fn as_any(&self) -> &dyn std::any::Any {
++        self
++    }
++
++    fn requires_initialization(&self) -> bool {
++        true
++    }
++
++    fn init_workers(&self, workers: &[Arc<dyn Worker>]) {
++        let mut state = self.state.lock().unwrap();
++        for worker in workers {
++            let model = normalize_model_key(worker.model_id()).to_string();
++            let tree = self
++                .trees
++                .entry(model.clone())
++                .or_insert_with(|| Arc::new(Tree::new()))
++                .clone();
++            tree.insert("", worker.url());
++            self.worker_models.insert(worker.url().to_string(), model);
++            state.entry(worker.url().to_string()).or_default();
++        }
++    }
++
++    fn remove_worker_by_url(&self, url: &str) {
++        for tree in self.trees.iter() {
++            tree.value().remove_tenant(url);
++        }
++        self.worker_models.remove(url);
++        self.state.lock().unwrap().remove(url);
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use crate::core::{BasicWorker, WorkerType};
++    use crate::kv_events::decoder::BlockHash;
++    use crate::tokenizer::mock::MockTokenizer;
++
++    fn workers() -> Vec<Arc<dyn Worker>> {
++        vec![
++            Arc::new(BasicWorker::new("http://w0".into(), WorkerType::Regular)),
++            Arc::new(BasicWorker::new("http://w1".into(), WorkerType::Regular)),
++        ]
++    }
++
++    #[test]
++    fn exact_event_match_overrides_approximate_home() {
++        let index = Arc::new(KVBlockIndex::new(100));
++        let hashes = [BlockHash::Bytes(vec![1; 32]), BlockHash::Bytes(vec![2; 32])];
++        index.on_blocks_stored(&hashes, None, &[1, 2, 3, 4], 2, "http://w1");
++        let policy = SMetricPolicy::with_exact_cache(
++            SMetricConfig {
++                eviction_interval_secs: 0,
++                ..Default::default()
++            },
++            index,
++            Arc::new(MockTokenizer::new()),
++            2,
++        );
++        let workers = workers();
++        policy.init_workers(&workers);
++
++        // Plant contradictory approximate state. Exact engine evidence wins.
++        policy
++            .trees
++            .get("default")
++            .unwrap()
++            .insert("Hello world test token", "http://w0");
++        assert_eq!(
++            policy.select_worker(&workers, Some("Hello world test token")),
++            Some(1)
++        );
++    }
++
++    #[test]
++    fn reservation_is_accounted_and_released_exactly_once() {
++        let policy = SMetricPolicy::new();
++        let workers = workers();
++        policy.init_workers(&workers);
++        let id = policy
++            .on_request_start("http://w0", Some("abcdef"), None)
++            .unwrap();
++        assert_eq!(policy.snapshot("http://w0").2, 1);
++        assert_eq!(policy.snapshot("http://w0").0, 6.0);
++        policy.on_request_complete("http://w0", Some(id), true, Duration::from_secs(1));
++        assert_eq!(policy.snapshot("http://w0").2, 0);
++        assert_eq!(policy.snapshot("http://w0").0, 0.0);
++        policy.on_request_complete("http://w0", Some(id), true, Duration::from_secs(1));
++        assert_eq!(policy.snapshot("http://w0").2, 0);
++    }
++
++    #[test]
++    fn continuation_sticks_until_home_is_overloaded() {
++        let config = SMetricConfig {
++            eviction_interval_secs: 0,
++            overload_factor: 1.1,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        let workers = workers();
++        policy.init_workers(&workers);
++        let first = policy.select_worker(&workers, Some("abcdefghij")).unwrap();
++        let home = workers[first].url().to_string();
++        let id = policy
++            .on_request_start(&home, Some("abcdefghij"), None)
++            .unwrap();
++        policy.on_request_complete(&home, Some(id), true, Duration::from_secs(1));
++        let continuation = "abcdefghijk";
++        assert_eq!(
++            policy.select_worker(&workers, Some(continuation)),
++            Some(first)
++        );
++
++        // Add enough router-observed work to the home to fail the ratio gate.
++        let id2 = policy
++            .on_request_start(&home, Some("xxxxxxxxxxxxxxxxxxxx"), None)
++            .unwrap();
++        assert_ne!(
++            policy.select_worker(&workers, Some(continuation)),
++            Some(first)
++        );
++        policy.on_request_complete(&home, Some(id2), true, Duration::from_secs(1));
++    }
++
++    #[test]
++    fn budget_gate_samples_busy_queue_and_aggregates_effective_work() {
++        let config = SMetricConfig {
++            gate: SMetricGate::BudgetAttention,
++            drain_min_samples: 1,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        let workers = workers();
++        policy.init_workers(&workers);
++        let id1 = policy
++            .on_request_start("http://w0", Some("abcdefghij"), None)
++            .unwrap();
++        let id2 = policy
++            .on_request_start("http://w0", Some("abcdefghijk"), None)
++            .unwrap();
++        policy.on_request_first_response("http://w0", Some(id1), Duration::from_secs(1));
++        policy.on_request_first_response("http://w0", Some(id2), Duration::from_secs(1));
++        assert_eq!(policy.snapshot("http://w0").3, 2);
++        // Both requests are sampled, including the second request that was
++        // queued behind the first. Their intervals overlap, so the estimator
++        // reports a finite effective-work rate rather than filtering either
++        // sample by queue state.
++        assert!(policy.measured_rate("http://w0") > 0.0);
++    }
++
++    #[test]
++    fn drain_rate_falls_back_until_minimum_samples() {
++        let config = SMetricConfig {
++            drain_min_samples: 2,
++            drain_tps_fallback: 123.0,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .insert("http://w0".into(), WorkerState::default());
++        assert_eq!(policy.measured_rate("http://w0"), 123.0);
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .get_mut("http://w0")
++            .unwrap()
++            .drain_samples
++            .push_back((Instant::now(), Instant::now(), 10.0));
++        assert_eq!(policy.measured_rate("http://w0"), 123.0);
++    }
++
++    #[test]
++    fn drain_rate_expires_old_samples_and_uses_window_sum() {
++        let config = SMetricConfig {
++            drain_min_samples: 2,
++            drain_window_secs: 10,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let fallback = config.drain_tps_fallback;
++        let policy = SMetricPolicy::with_config(config);
++        let now = Instant::now();
++        let mut worker = WorkerState::default();
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(11),
++            now - Duration::from_secs(11),
++            100.0,
++        ));
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(1),
++            now - Duration::from_secs(2),
++            30.0,
++        ));
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .insert("http://w0".into(), worker);
++        // The expired sample is removed; the remaining sample leaves us below
++        // the minimum and therefore uses the configured fallback.
++        assert_eq!(policy.measured_rate("http://w0"), fallback);
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .get_mut("http://w0")
++            .unwrap()
++            .drain_samples
++            .push_back((now, now - Duration::from_secs(1), 20.0));
++        // The two live intervals overlap for one second, so their 50 work
++        // units are divided by two seconds of union busy time.
++        assert_eq!(policy.measured_rate("http://w0"), 25.0);
++    }
++
++    #[test]
++    fn drain_rate_handles_concurrent_completions_without_queue_filter() {
++        let config = SMetricConfig {
++            drain_min_samples: 2,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        let workers = workers();
++        policy.init_workers(&workers);
++        let first = policy
++            .on_request_start("http://w0", Some("abcdefghij"), None)
++            .unwrap();
++        let second = policy
++            .on_request_start("http://w0", Some("abcdefghijklmnop"), None)
++            .unwrap();
++        policy.on_request_first_response("http://w0", Some(second), Duration::from_secs(2));
++        policy.on_request_first_response("http://w0", Some(first), Duration::from_secs(1));
++        assert_eq!(policy.snapshot("http://w0").3, 2);
++        assert!(policy.measured_rate("http://w0") > 0.0);
++    }
++
++    #[test]
++    fn drain_rate_excludes_idle_gaps_from_busy_denominator() {
++        let config = SMetricConfig {
++            drain_min_samples: 2,
++            drain_window_secs: 30,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        let now = Instant::now();
++        let mut worker = WorkerState::default();
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(8),
++            now - Duration::from_secs(10),
++            20.0,
++        ));
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(2),
++            now - Duration::from_secs(4),
++            40.0,
++        ));
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .insert("http://w0".into(), worker);
++        // Two 2-second busy intervals separated by 4 seconds of idle time.
++        assert_eq!(policy.measured_rate("http://w0"), 15.0);
++    }
++
++    #[test]
++    fn drain_rate_orders_completions_and_clips_cross_window_intervals() {
++        let config = SMetricConfig {
++            drain_min_samples: 2,
++            drain_window_secs: 10,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        };
++        let policy = SMetricPolicy::with_config(config);
++        let now = Instant::now();
++        let mut worker = WorkerState::default();
++        // Insert completion events out of order. The first interval started
++        // before the window and must be clipped at window_start (10 seconds
++        // before `now`) before the union duration is computed.
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(5),
++            now - Duration::from_secs(7),
++            30.0,
++        ));
++        worker.drain_samples.push_back((
++            now - Duration::from_secs(1),
++            now - Duration::from_secs(20),
++            100.0,
++        ));
++        policy
++            .state
++            .lock()
++            .unwrap()
++            .insert("http://w0".into(), worker);
++        // The clipped union is [now-10, now-1] (9 seconds), so 130 work
++        // units yield 130/9 effective work units per second.
++        let rate = policy.measured_rate("http://w0");
++        // `measured_rate` samples a fresh `Instant`, so allow the few
++        // microseconds between constructing the fixtures and that call.
++        assert!((rate - (130.0 / 9.0)).abs() < 1e-3, "rate={rate}");
++    }
++
++    #[test]
++    fn budget_hysteresis_sticks_inside_band_and_releases_beyond_it() {
++        assert!(SMetricPolicy::budget_accepts(1.04, 1.0, 0.05, true));
++        assert!(!SMetricPolicy::budget_accepts(1.06, 1.0, 0.05, true));
++        assert!(!SMetricPolicy::budget_accepts(1.04, 1.0, 0.05, false));
++        assert!(SMetricPolicy::budget_accepts(0.99, 1.0, 0.0, false));
++    }
++
++    #[test]
++    fn session_lease_has_ttl_and_bounded_capacity() {
++        let policy = SMetricPolicy::with_config(SMetricConfig {
++            drain_window_secs: 10,
++            eviction_interval_secs: 0,
++            ..Default::default()
++        });
++        let workers = workers();
++        let now = Instant::now();
++        policy.remember_lease("s", "http://w0", true, now);
++        assert_eq!(policy.leased_worker("s", &workers, now), Some((0, true)));
++        assert_eq!(
++            policy.leased_worker("s", &workers, now + Duration::from_secs(11)),
++            None
++        );
++
++        let mut leases = policy.session_leases.lock().unwrap();
++        for i in 0..MAX_SESSION_LEASES {
++            leases.insert(
++                format!("old-{i}"),
++                SessionLease {
++                    worker_url: "http://w0".into(),
++                    last_stuck: true,
++                    last_seen: now,
++                },
++            );
++        }
++        drop(leases);
++        policy.remember_lease("new", "http://w1", false, now);
++        assert_eq!(
++            policy.session_leases.lock().unwrap().len(),
++            MAX_SESSION_LEASES
++        );
++    }
++
++    #[test]
++    fn no_session_header_keeps_lease_state_empty() {
++        let policy = SMetricPolicy::with_config(SMetricConfig {
++            eviction_interval_secs: 0,
++            ..Default::default()
++        });
++        let workers = workers();
++        assert!(policy.select_worker(&workers, Some("no session")).is_some());
++        assert!(policy.session_leases.lock().unwrap().is_empty());
++    }
++
++    #[test]
++    fn first_response_moves_prefill_work_to_decode_context() {
++        let policy = SMetricPolicy::new();
++        let workers = workers();
++        policy.init_workers(&workers);
++        let id = policy
++            .on_request_start("http://w0", Some("abcdefghij"), None)
++            .unwrap();
++        assert!(policy.snapshot("http://w0").1 > 0.0);
++        policy.on_request_first_response("http://w0", Some(id), Duration::from_millis(50));
++        let during_decode = policy.snapshot("http://w0");
++        assert_eq!(during_decode.0, 10.0);
++        assert_eq!(during_decode.1, 0.0);
++        assert_eq!(during_decode.2, 1);
++        policy.on_request_complete("http://w0", Some(id), true, Duration::from_secs(1));
++        assert_eq!(policy.snapshot("http://w0").0, 0.0);
++    }
++}
+diff --git a/src/routers/factory.rs b/src/routers/factory.rs
+index 1b368f7..2a2384c 100644
+--- a/src/routers/factory.rs
++++ b/src/routers/factory.rs
+@@ -12,7 +12,9 @@ use crate::kv_events::pool::KVEventPoolConfig;
+ use crate::kv_events::KVEventPool;
+ use crate::kv_index::{run_kv_index_updater, KVBlockIndex};
+ use crate::policies::kv_aware::{KvAwareConfig, KvAwarePolicy};
+-use crate::policies::{CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy, PolicyFactory};
++use crate::policies::{
++    CacheAwareConfig, CacheAwarePolicy, LoadBalancingPolicy, PolicyFactory, SMetricPolicy,
++};
+ use crate::server::AppContext;
+ use crate::tokenizer::factory::create_tokenizer_async;
+ use crate::tokenizer::traits::Encoder;
+@@ -147,7 +149,9 @@ impl RouterFactory {
+         if let Some(kv_cfg) = kv_events_config {
+             if matches!(
+                 ctx.router_config.policy,
+-                PolicyConfig::KvAware { .. } | PolicyConfig::CacheAware { .. }
++                PolicyConfig::KvAware { .. }
++                    | PolicyConfig::CacheAware { .. }
++                    | PolicyConfig::SMetric(_)
+             ) {
+                 tracing::info!(
+                     "Bootstrapping KV event infrastructure for regular mode \
+@@ -262,6 +266,19 @@ impl RouterFactory {
+                     ));
+                     ctx.policy_registry.set_default_policy(policy);
+                 }
++                if let PolicyConfig::SMetric(config) = &ctx.router_config.policy {
++                    tracing::info!(
++                        "Creating SMetric with exact KV-event index (block_size={})",
++                        kv_cfg.block_size
++                    );
++                    let policy = Arc::new(SMetricPolicy::with_exact_cache(
++                        (**config).clone(),
++                        Arc::clone(&block_index),
++                        Arc::clone(&tokenizer),
++                        kv_cfg.block_size,
++                    ));
++                    ctx.policy_registry.set_default_policy(policy);
++                }
+             }
+         }
+ 
+diff --git a/src/routers/http/router.rs b/src/routers/http/router.rs
+index a05323f..136313e 100644
+--- a/src/routers/http/router.rs
++++ b/src/routers/http/router.rs
+@@ -26,6 +26,7 @@ use axum::{
+ use futures_util::StreamExt;
+ use reqwest::Client;
+ use std::collections::HashMap;
++use std::sync::atomic::{AtomicBool, Ordering};
+ use std::sync::Arc;
+ use std::time::{Duration, Instant};
+ use tokio_stream::wrappers::UnboundedReceiverStream;
+@@ -47,6 +48,46 @@ pub struct Router {
+     _load_monitor_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
+ }
+ 
++#[derive(Debug)]
++struct PolicyRequestLifecycle {
++    policy: Arc<dyn LoadBalancingPolicy>,
++    worker_url: String,
++    reservation_id: u64,
++    started_at: Instant,
++    completed: AtomicBool,
++}
++
++impl PolicyRequestLifecycle {
++    fn first_response(&self) {
++        self.policy.on_request_first_response(
++            &self.worker_url,
++            Some(self.reservation_id),
++            self.started_at.elapsed(),
++        );
++    }
++
++    fn complete(&self, success: bool) {
++        if self.completed.swap(true, Ordering::AcqRel) {
++            return;
++        }
++        self.policy.on_request_complete(
++            &self.worker_url,
++            Some(self.reservation_id),
++            success,
++            self.started_at.elapsed(),
++        );
++    }
++}
++
++impl Drop for PolicyRequestLifecycle {
++    fn drop(&mut self) {
++        // A handler future can be cancelled before it reaches an explicit
++        // completion path. Releasing here keeps policy-owned work from
++        // becoming permanent; complete() is idempotent for normal paths.
++        self.complete(false);
++    }
++}
++
+ impl Router {
+     /// Create a new router with injected policy and client
+     #[allow(clippy::too_many_arguments)]
+@@ -128,16 +169,9 @@ impl Router {
+             let model_id = worker_arc.model_id();
+             let policy = ctx.policy_registry.on_worker_added(model_id, None);
+ 
+-            // If this is a cache-aware policy and it's the first worker for this model,
+-            // initialize it with the worker
+-            if policy.name() == "cache_aware" {
+-                if let Some(cache_aware) = policy
+-                    .as_any()
+-                    .downcast_ref::<crate::policies::CacheAwarePolicy>()
+-                {
+-                    let worker_dyn: Arc<dyn Worker> = worker_arc.clone();
+-                    cache_aware.init_workers(std::slice::from_ref(&worker_dyn));
+-                }
++            if policy.requires_initialization() {
++                let worker_dyn: Arc<dyn Worker> = worker_arc.clone();
++                policy.init_workers(std::slice::from_ref(&worker_dyn));
+             }
+         }
+ 
+@@ -564,14 +598,27 @@ impl Router {
+                     }
+                 };
+ 
+-                // Optional load tracking for cache-aware policy
+-                // Get the policy for this model to check if it's cache-aware
++                // Get the policy again so the selected request can be
++                // registered against that policy's native lifecycle state.
+                 let policy = match model_id {
+                     Some(model) => self.policy_registry.get_policy_or_default(model),
+                     None => self.policy_registry.get_default_policy(),
+                 };
+ 
+-                let load_incremented = if policy.name() == "cache_aware" {
++                let request_headers = Self::headers_to_request_headers(headers);
++                let lifecycle = policy
++                    .on_request_start(worker.url(), Some(&text), request_headers.as_ref())
++                    .map(|reservation_id| {
++                        Arc::new(PolicyRequestLifecycle {
++                            policy: Arc::clone(&policy),
++                            worker_url: worker.url().to_string(),
++                            reservation_id,
++                            started_at: Instant::now(),
++                            completed: AtomicBool::new(false),
++                        })
++                    });
++
++                let load_incremented = if policy.tracks_worker_load() {
+                     worker.increment_load();
+                     RouterMetrics::set_running_requests(worker.url(), worker.load());
+                     true
+@@ -579,13 +626,6 @@ impl Router {
+                     false
+                 };
+ 
+-                // Keep a clone for potential cleanup on retry
+-                let worker_for_cleanup = if load_incremented {
+-                    Some(worker.clone())
+-                } else {
+-                    None
+-                };
+-
+                 let mut response = self
+                     .send_typed_request(
+                         headers,
+@@ -594,6 +634,7 @@ impl Router {
+                         worker.url(),
+                         is_stream,
+                         load_incremented,
++                        lifecycle,
+                     )
+                     .await;
+ 
+@@ -602,18 +643,6 @@ impl Router {
+                 let status = response.status();
+                 worker.record_outcome(status.is_success() || status.is_client_error());
+ 
+-                // For retryable failures, we need to decrement load since send_typed_request
+-                // won't have done it (it only decrements on success or non-retryable failures)
+-                if is_retryable_status(response.status()) && load_incremented {
+-                    if let Some(cleanup_worker) = worker_for_cleanup {
+-                        cleanup_worker.decrement_load();
+-                        RouterMetrics::set_running_requests(
+-                            cleanup_worker.url(),
+-                            cleanup_worker.load(),
+-                        );
+-                    }
+-                }
+-
+                 // Passive benchmark observability: expose the already selected
+                 // destination and policy without influencing selection.
+                 if let Ok(value) = HeaderValue::from_str(worker.url()) {
+@@ -622,7 +651,6 @@ impl Router {
+                 if let Ok(value) = HeaderValue::from_str(policy.name()) {
+                     response.headers_mut().insert("x-policy-decision", value);
+                 }
+-
+                 response
+             },
+             // should_retry predicate
+@@ -772,7 +800,26 @@ impl Router {
+             .await
+     }
+ 
++    fn finish_tracked_request(
++        &self,
++        worker_url: &str,
++        load_incremented: bool,
++        lifecycle: Option<&PolicyRequestLifecycle>,
++        success: bool,
++    ) {
++        if load_incremented {
++            if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
++                worker.decrement_load();
++                RouterMetrics::set_running_requests(worker_url, worker.load());
++            }
++        }
++        if let Some(lifecycle) = lifecycle {
++            lifecycle.complete(success);
++        }
++    }
++
+     // Send typed request directly without conversion
++    #[allow(clippy::too_many_arguments)]
+     async fn send_typed_request<T: serde::Serialize>(
+         &self,
+         headers: Option<&HeaderMap>,
+@@ -781,6 +828,7 @@ impl Router {
+         worker_url: &str,
+         is_stream: bool,
+         load_incremented: bool, // Whether load was incremented for this request
++        lifecycle: Option<Arc<PolicyRequestLifecycle>>,
+     ) -> Response {
+         let (mut request_builder, extracted_dp_rank, request_url) =
+             if self.intra_node_data_parallel_size > 1 {
+@@ -788,6 +836,12 @@ impl Router {
+                     Ok(tup) => tup,
+                     Err(e) => {
+                         error!("Failed to extract dp_rank: {}", e);
++                        self.finish_tracked_request(
++                            worker_url,
++                            load_incremented,
++                            lifecycle.as_deref(),
++                            false,
++                        );
+                         return (
+                             StatusCode::INTERNAL_SERVER_ERROR,
+                             format!("Failed to extract dp_rank: {}", e),
+@@ -800,6 +854,12 @@ impl Router {
+                 let json_val = match serde_json::to_value(typed_req) {
+                     Ok(j) => j,
+                     Err(e) => {
++                        self.finish_tracked_request(
++                            worker_url,
++                            load_incremented,
++                            lifecycle.as_deref(),
++                            false,
++                        );
+                         return (
+                             StatusCode::BAD_REQUEST,
+                             format!("Convert into serde_json::Value failed: {}", e),
+@@ -865,13 +925,12 @@ impl Router {
+                     worker_url, route, e
+                 );
+ 
+-                // Decrement load on error if it was incremented
+-                if load_incremented {
+-                    if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
+-                        worker.decrement_load();
+-                        RouterMetrics::set_running_requests(worker_url, worker.load());
+-                    }
+-                }
++                self.finish_tracked_request(
++                    worker_url,
++                    load_incremented,
++                    lifecycle.as_deref(),
++                    false,
++                );
+ 
+                 return (
+                     StatusCode::INTERNAL_SERVER_ERROR,
+@@ -888,38 +947,36 @@ impl Router {
+             // For non-streaming requests, preserve headers
+             let response_headers = header_utils::preserve_response_headers(res.headers());
+ 
+-            let response = match res.bytes().await {
++            let (response, body_ok) = match res.bytes().await {
+                 Ok(body) => {
++                    if let Some(lifecycle) = lifecycle.as_deref() {
++                        lifecycle.first_response();
++                    }
+                     let mut response = Response::new(axum::body::Body::from(body));
+                     *response.status_mut() = status;
+                     *response.headers_mut() = response_headers;
+-                    response
++                    (response, true)
+                 }
+                 Err(e) => {
+-                    // IMPORTANT: Decrement load on error before returning
+-                    if load_incremented {
+-                        if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
+-                            worker.decrement_load();
+-                            RouterMetrics::set_running_requests(worker_url, worker.load());
+-                        }
+-                    }
+-
+                     let error_msg = format!("Failed to get response body: {}", e);
+-                    (StatusCode::INTERNAL_SERVER_ERROR, error_msg).into_response()
++                    (
++                        (StatusCode::INTERNAL_SERVER_ERROR, error_msg).into_response(),
++                        false,
++                    )
+                 }
+             };
+ 
+-            // Decrement load counter for non-streaming requests if it was incremented
+-            if load_incremented {
+-                if let Some(worker) = self.worker_registry.get_by_url(worker_url) {
+-                    worker.decrement_load();
+-                    RouterMetrics::set_running_requests(worker_url, worker.load());
+-                }
+-            }
++            self.finish_tracked_request(
++                worker_url,
++                load_incremented,
++                lifecycle.as_deref(),
++                body_ok && status.is_success(),
++            );
+ 
+             response
+-        } else if load_incremented {
+-            // For streaming with load tracking, we need to manually decrement when done
++        } else {
++            // Keep both generic load and policy reservations until the SSE body
++            // actually ends. Receiving response headers is not completion.
+             let registry = Arc::clone(&self.worker_registry);
+             let worker_url = worker_url.to_string();
+ 
+@@ -931,75 +988,39 @@ impl Router {
+             let stream = res.bytes_stream();
+             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+ 
+-            // Spawn task to forward stream and detect completion
++            // Spawn task to forward stream and detect completion.
+             tokio::spawn(async move {
+                 let mut stream = stream;
+-                let mut decremented = false;
++                let mut first = true;
++                let mut success = status.is_success();
+                 while let Some(chunk) = stream.next().await {
+                     match chunk {
+                         Ok(bytes) => {
+-                            // Check for stream end marker
+-                            if bytes
+-                                .as_ref()
+-                                .windows(12)
+-                                .any(|window| window == b"data: [DONE]")
+-                            {
+-                                if let Some(worker) = registry.get_by_url(&worker_url) {
+-                                    worker.decrement_load();
+-                                    RouterMetrics::set_running_requests(&worker_url, worker.load());
+-                                    decremented = true;
++                            if first {
++                                if let Some(lifecycle) = lifecycle.as_deref() {
++                                    lifecycle.first_response();
+                                 }
++                                first = false;
+                             }
+                             if tx.send(Ok(bytes)).is_err() {
+                                 break;
+                             }
+                         }
+                         Err(e) => {
++                            success = false;
+                             let _ = tx.send(Err(format!("Stream error: {}", e)));
+                             break;
+                         }
+                     }
+                 }
+-                if !decremented {
++                if load_incremented {
+                     if let Some(worker) = registry.get_by_url(&worker_url) {
+                         worker.decrement_load();
+                         RouterMetrics::set_running_requests(&worker_url, worker.load());
+                     }
+                 }
+-            });
+-
+-            let stream = UnboundedReceiverStream::new(rx);
+-            let body = Body::from_stream(stream);
+-
+-            let mut response = Response::new(body);
+-            *response.status_mut() = status;
+-            *response.headers_mut() = response_headers;
+-            response
+-        } else {
+-            // For requests without load tracking, just stream
+-            // Preserve headers for streaming response
+-            let mut response_headers = header_utils::preserve_response_headers(res.headers());
+-            // Ensure we set the correct content-type for SSE
+-            response_headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/event-stream"));
+-
+-            let stream = res.bytes_stream();
+-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+-
+-            // Spawn task to forward stream
+-            tokio::spawn(async move {
+-                let mut stream = stream;
+-                while let Some(chunk) = stream.next().await {
+-                    match chunk {
+-                        Ok(bytes) => {
+-                            if tx.send(Ok(bytes)).is_err() {
+-                                break;
+-                            }
+-                        }
+-                        Err(e) => {
+-                            let _ = tx.send(Err(format!("Stream error: {}", e)));
+-                            break;
+-                        }
+-                    }
++                if let Some(lifecycle) = lifecycle.as_deref() {
++                    lifecycle.complete(success);
+                 }
+             });
+ 
+@@ -1071,16 +1092,10 @@ impl Router {
+                                 let model_id = worker_arc.model_id();
+                                 let policy = self.policy_registry.on_worker_added(model_id, None);
+ 
+-                                // If this is a cache-aware policy, update it with all workers for this model
+-                                if policy.name() == "cache_aware" {
+-                                    if let Some(cache_aware) = policy
+-                                        .as_any()
+-                                        .downcast_ref::<crate::policies::CacheAwarePolicy>(
+-                                    ) {
+-                                        let model_workers =
+-                                            self.worker_registry.get_by_model_fast(model_id);
+-                                        cache_aware.init_workers(&model_workers);
+-                                    }
++                                if policy.requires_initialization() {
++                                    let model_workers =
++                                        self.worker_registry.get_by_model_fast(model_id);
++                                    policy.init_workers(&model_workers);
+                                 }
+ 
+                                 worker_added = true;
+@@ -1108,17 +1123,10 @@ impl Router {
+                             let model_id = worker_arc.model_id();
+                             let policy = self.policy_registry.on_worker_added(model_id, None);
+ 
+-                            // If this is a cache-aware policy, add this worker to it
+-                            if policy.name() == "cache_aware" {
+-                                if let Some(cache_aware) = policy
+-                                    .as_any()
+-                                    .downcast_ref::<crate::policies::CacheAwarePolicy>(
+-                                ) {
+-                                    // Get all workers for this model
+-                                    let model_workers =
+-                                        self.worker_registry.get_by_model_fast(model_id);
+-                                    cache_aware.init_workers(&model_workers);
+-                                }
++                            if policy.requires_initialization() {
++                                let model_workers =
++                                    self.worker_registry.get_by_model_fast(model_id);
++                                policy.init_workers(&model_workers);
+                             }
+                         }
+ 
+@@ -1175,6 +1183,9 @@ impl Router {
+                 if w.url().starts_with(&worker_url_prefix) {
+                     // Get model_id before removing
+                     let model_id = w.model_id().to_string();
++                    if let Some(policy) = self.policy_registry.get_policy(&model_id) {
++                        policy.remove_worker_by_url(w.url());
++                    }
+ 
+                     if self.worker_registry.remove_by_url(w.url()).is_some() {
+                         info!("Removed worker: {}", w.url());
+@@ -1190,21 +1201,8 @@ impl Router {
+ 
+             RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
+ 
+-            // If any models are using cache aware policy, remove the workers from the tree
+-            // Check each removed worker's model and get its policy
+             for dp_url in removed_workers.iter() {
+-                if let Some(worker) = self.worker_registry.get_by_url(dp_url) {
+-                    let model_id = worker.model_id();
+-                    if let Some(policy) = self.policy_registry.get_policy(model_id) {
+-                        if let Some(cache_aware) = policy
+-                            .as_any()
+-                            .downcast_ref::<crate::policies::CacheAwarePolicy>()
+-                        {
+-                            cache_aware.remove_worker_by_url(dp_url);
+-                            info!("Removed worker from cache-aware tree: {}", dp_url);
+-                        }
+-                    }
+-                }
++                info!("Removed worker from policy state: {}", dp_url);
+             }
+         } else {
+             // Get the worker first to extract model_id
+@@ -1215,6 +1213,10 @@ impl Router {
+                 return;
+             };
+ 
++            if let Some(policy) = self.policy_registry.get_policy(&model_id) {
++                policy.remove_worker_by_url(worker_url);
++            }
++
+             if self.worker_registry.remove_by_url(worker_url).is_some() {
+                 info!("Removed worker: {}", worker_url);
+ 
+@@ -1224,16 +1226,7 @@ impl Router {
+                 RouterMetrics::set_active_workers(self.worker_registry.get_all().len());
+             }
+ 
+-            // If the model is using cache aware policy, remove the worker from the tree
+-            if let Some(policy) = self.policy_registry.get_policy(&model_id) {
+-                if let Some(cache_aware) = policy
+-                    .as_any()
+-                    .downcast_ref::<crate::policies::CacheAwarePolicy>()
+-                {
+-                    cache_aware.remove_worker_by_url(worker_url);
+-                    info!("Removed worker from cache-aware tree: {}", worker_url);
+-                }
+-            }
++            info!("Removed worker from policy state: {}", worker_url);
+         }
+     }
+ 
+diff --git a/tests/api_endpoints_test.rs b/tests/api_endpoints_test.rs
+index de2fe94..ff43644 100644
+--- a/tests/api_endpoints_test.rs
++++ b/tests/api_endpoints_test.rs
+@@ -12,6 +12,7 @@ use std::sync::Arc;
+ use tower::ServiceExt;
+ use vllm_router_rs::config::{
+     CircuitBreakerConfig, ConnectionMode, PolicyConfig, RetryConfig, RouterConfig, RoutingMode,
++    SMetricGate, SMetricPolicyConfig,
+ };
+ use vllm_router_rs::routers::{RouterFactory, RouterTrait};
+ 
+@@ -23,6 +24,107 @@ struct TestContext {
+     config: RouterConfig,
+ }
+ 
++#[cfg(test)]
++mod smetric_tests {
++    use super::*;
++
++    fn policy_config() -> PolicyConfig {
++        PolicyConfig::SMetric(Box::new(SMetricPolicyConfig {
++            gate: SMetricGate::Overload,
++            overload_factor: 2.0,
++            hit_ratio: 0.5,
++            block_size: 16,
++            overlap_score_credit: 1.0,
++            overlap_score_credit_decay: 0.0,
++            prefill_load_scale: 1.0,
++            active_request_weight: 0.0,
++            budget_gamma: 1.0,
++            budget_base_s: 1.0,
++            budget_input_tokens_per_s: 16_000.0,
++            drain_tps_fallback: 21_400.0,
++            drain_window_secs: 300,
++            drain_min_samples: 8,
++            attention_l_eq: 6_923.0,
++            eviction_interval_secs: 120,
++            max_tree_size: 1 << 20,
++        }))
++    }
++
++    async fn route(app: axum::Router, text: &str) -> (StatusCode, String, String) {
++        let payload = json!({"text": text, "stream": false});
++        let request = Request::builder()
++            .method("POST")
++            .uri("/generate")
++            .header(CONTENT_TYPE, "application/json")
++            .body(Body::from(serde_json::to_vec(&payload).unwrap()))
++            .unwrap();
++        let response = app.oneshot(request).await.unwrap();
++        let status = response.status();
++        let policy = response
++            .headers()
++            .get("x-policy-decision")
++            .unwrap()
++            .to_str()
++            .unwrap()
++            .to_string();
++        let worker = response
++            .headers()
++            .get("x-routed-instance")
++            .unwrap()
++            .to_str()
++            .unwrap()
++            .to_string();
++        let _ = axum::body::to_bytes(response.into_body(), usize::MAX)
++            .await
++            .unwrap();
++        (status, policy, worker)
++    }
++
++    #[tokio::test]
++    async fn native_smetric_routes_and_reuses_prefix_home() {
++        let mut config = RouterConfig::new(
++            RoutingMode::Regular {
++                worker_urls: vec![],
++                kv_events: None,
++            },
++            policy_config(),
++        );
++        config.worker_startup_timeout_secs = 2;
++        config.worker_startup_check_interval_secs = 1;
++        let ctx = TestContext::new_with_config(
++            config,
++            vec![
++                MockWorkerConfig {
++                    port: 18610,
++                    worker_type: WorkerType::Regular,
++                    health_status: HealthStatus::Healthy,
++                    response_delay_ms: 0,
++                    fail_rate: 0.0,
++                },
++                MockWorkerConfig {
++                    port: 18611,
++                    worker_type: WorkerType::Regular,
++                    health_status: HealthStatus::Healthy,
++                    response_delay_ms: 0,
++                    fail_rate: 0.0,
++                },
++            ],
++        )
++        .await;
++        let app = ctx.create_app().await;
++
++        let first = route(app.clone(), "a sufficiently long shared prefix").await;
++        let second = route(app, "a sufficiently long shared prefix plus a turn").await;
++        assert_eq!(first.0, StatusCode::OK);
++        assert_eq!(second.0, StatusCode::OK);
++        assert_eq!(first.1, "smetric");
++        assert_eq!(second.1, "smetric");
++        assert_eq!(first.2, second.2);
++
++        ctx.shutdown().await;
++    }
++}
++
+ impl TestContext {
+     async fn new(worker_configs: Vec<MockWorkerConfig>) -> Self {
+         // Create default router config

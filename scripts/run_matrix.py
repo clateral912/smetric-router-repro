@@ -1,8 +1,8 @@
 """Run the two workload settings x three native Router policies x N replicas.
 
 The script deliberately requires a reset hook. It must clear engine KV state,
-Mooncake, Redis, and restart workers before every arm; silently reusing state
-would invalidate the comparison.
+Mooncake, and restart workers before every arm; silently reusing state would
+invalidate the comparison.
 """
 from __future__ import annotations
 import argparse, os, subprocess, sys
@@ -20,7 +20,6 @@ def main() -> None:
     ap.add_argument("--reset-hook", required=True,
                     help="Executable called as RESET_HOOK setting policy replicate")
     ap.add_argument("--router-binary", type=Path, default=ROOT / "router/target/release/vllm-router")
-    ap.add_argument("--redis-url", default="redis://127.0.0.1:16380/0")
     ap.add_argument("--output-root", type=Path, default=ROOT / "results")
     ap.add_argument("--kv-events", action="store_true")
     args = ap.parse_args()
@@ -37,7 +36,7 @@ def main() -> None:
                 cmd = [sys.executable, str(runner), "--config", str(config),
                        "--router-binary", str(args.router_binary),
                        "--router-source", str(ROOT / "router"), "--arm", policy,
-                       "--redis-url", args.redis_url, "--output-root", str(out),
+                       "--output-root", str(out),
                        "--port", str(port), "--metrics-port", str(metrics)]
                 if args.kv_events:
                     cmd.append("--kv-events")

@@ -1,0 +1,118 @@
+{
+  "config": {
+    "spec": {
+      "backends": {
+        "instances": [
+          {
+            "engine_id": "codex-po-0",
+            "url": "http://127.0.0.1:8000"
+          },
+          {
+            "engine_id": "codex-po-1",
+            "url": "http://127.0.0.1:8001"
+          },
+          {
+            "engine_id": "codex-po-2",
+            "url": "http://127.0.0.1:8002"
+          },
+          {
+            "engine_id": "codex-po-3",
+            "url": "http://127.0.0.1:8003"
+          },
+          {
+            "engine_id": "codex-po-4",
+            "url": "http://127.0.0.1:8004"
+          },
+          {
+            "engine_id": "codex-po-5",
+            "url": "http://127.0.0.1:8005"
+          },
+          {
+            "engine_id": "codex-po-6",
+            "url": "http://127.0.0.1:8006"
+          },
+          {
+            "engine_id": "codex-po-7",
+            "url": "http://127.0.0.1:8007"
+          }
+        ],
+        "type": "external"
+      },
+      "capture_scheduler_final_state": false,
+      "capture_single_scheduler_clock_domain": false,
+      "mode": "replay",
+      "model": "Qwen3-30B-A3B",
+      "name": "codex-prefill-400k-vllm-router-native-smetric-optimized",
+      "output_root": "results/codex-po",
+      "persist_trace_snapshot": false,
+      "policy": "smetric",
+      "policy_params": {},
+      "prime_shared_prefix": true,
+      "redis_url": "redis://127.0.0.1:16380/0",
+      "replay": {
+        "dispatch_mode": "thinktime",
+        "max_duration_s": 2100,
+        "max_model_len_filter": 400000,
+        "prefill_only": true
+      },
+      "scheduler": {},
+      "scheduler_count": 1,
+      "scheduler_final_state_timeout_s": 10.0,
+      "seed": 42,
+      "srr": {},
+      "state_record_period_s": 0.5,
+      "trace": "traces/codex/steady_warm1200_measure600_n220_seed42.jsonl"
+    }
+  },
+  "finished_at_unix": 1789742833.551651,
+  "git_commit": "8a83db6a797d1d7547e33fdf352f63b91fc1b079-dirty",
+  "instances": [
+    {
+      "engine_id": "codex-po-0",
+      "url": "http://127.0.0.1:8000"
+    },
+    {
+      "engine_id": "codex-po-1",
+      "url": "http://127.0.0.1:8001"
+    },
+    {
+      "engine_id": "codex-po-2",
+      "url": "http://127.0.0.1:8002"
+    },
+    {
+      "engine_id": "codex-po-3",
+      "url": "http://127.0.0.1:8003"
+    },
+    {
+      "engine_id": "codex-po-4",
+      "url": "http://127.0.0.1:8004"
+    },
+    {
+      "engine_id": "codex-po-5",
+      "url": "http://127.0.0.1:8005"
+    },
+    {
+      "engine_id": "codex-po-6",
+      "url": "http://127.0.0.1:8006"
+    },
+    {
+      "engine_id": "codex-po-7",
+      "url": "http://127.0.0.1:8007"
+    }
+  ],
+  "manifest_version": 1,
+  "model": "Qwen3-30B-A3B",
+  "policy": "smetric",
+  "run_id": "codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_221210",
+  "scheduler_args": {
+    "arm": "smetric_optimized",
+    "policy": "smetric",
+    "policy_params": "budget_attention; explicit optimized parameters",
+    "prefill_only": true
+  },
+  "started_at_unix": 1789740732.3715975,
+  "trace_path": "traces/codex/steady_warm1200_measure600_n220_seed42.jsonl",
+  "trace_sha256": "bf867df2b85118091da9e3658039321b59b99cbe858276732fd33343c331e6b8",
+  "vllm_patches": [],
+  "vllm_version": null
+}

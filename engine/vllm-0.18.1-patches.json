@@ -28,14 +28,6 @@
       "post_sha256": "3cc8e7d64c2c863e1f95cdcc2aa6bcee82db19e064a2557c9e16564a864ba307",
       "pre_sha256": "dd5dd6e7668a2f76ee0e1df92b972196485f2d515acc81d91993e9614f70608f"
     },
-    "v1/engine/__init__.py": {
-      "post_sha256": "0a547d0c6fc9270a3e6ee13b32f23e0656e64a958767c168ccdfa5fe0dfb9956",
-      "pre_sha256": "d56e7078c3e440fbd2d7aa52d79c7fb336455368cabece8aaa02cb1c0279e5a7"
-    },
-    "v1/engine/output_processor.py": {
-      "post_sha256": "dc2db6f219ad5438caedf44ec2b36d65437c9a57a1343a04eadf42fbfe3e037a",
-      "pre_sha256": "55c69b4c422d58428eb2e06ab27a83bb330583c54253524fb32ba7ff041192a2"
-    },
     "v1/metrics/stats.py": {
       "post_sha256": "367a2ca71c6affc9dc553fc5727c0ad82b4f4e842f7c0eaedeef3507f151267c",
       "pre_sha256": "f0a7650382bccb6fac7d640c0d67ec1992087e371c5e1122553a18263d38ec67"
@@ -57,10 +49,6 @@
     {
       "name": "0003-scheduler-hooks.patch",
       "sha256": "bd99890a2604f7781e9661564c0fc7c4bc91b5deb6b1127bb83ebd4f912ffcd6"
-    },
-    {
-      "name": "0004-engine-state-publisher.patch",
-      "sha256": "9c87b3eba0c595dda524caa13a7680d8f1763bb428a4ced6ffea356426c0ba1b"
     },
     {
       "name": "0005-prompt-token-stats-negative-inc-guard.patch",
