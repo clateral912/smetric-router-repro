@@ -40,19 +40,19 @@
   "patches": [
     {
       "name": "0001-external-cached-tokens.patch",
-      "sha256": "cea72d09f45175f465073fd7cf94a14c48f0f4311e068af14c703fd5d5a6d3c3"
+      "sha256": "d65518c9a4963241ecb90421b4b5e218847dd6a3bf12196974e7a36fd79654b8"
     },
     {
       "name": "0002-mooncake-connector.patch",
-      "sha256": "f147064b37c0ab7195d9f82afd052734849e8130cafffd4001c1e800e99209cd"
+      "sha256": "d599a80e2e8c4961ac4419e0eb4129768d6248ea2639db77254334c07aa386c1"
     },
     {
       "name": "0003-scheduler-hooks.patch",
-      "sha256": "bd99890a2604f7781e9661564c0fc7c4bc91b5deb6b1127bb83ebd4f912ffcd6"
+      "sha256": "b7b98baad84d4fcb1eab8c15fde404ff9b316e110d901fd162347670bca2bfff"
     },
     {
       "name": "0005-prompt-token-stats-negative-inc-guard.patch",
-      "sha256": "8a6d652d8f09b8f2fcf0a4d3719a1d66e1e5179fc291ff29e8d90cdbb47d0f0d"
+      "sha256": "7259adf5efe54cb0e69b1a795869da4100ce1e1a2fcd47b503ec6be043381164"
     }
   ],
   "vllm_version": "0.18.1"
