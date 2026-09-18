@@ -40,7 +40,7 @@
   "patches": [
     {
       "name": "0001-external-cached-tokens.patch",
-      "sha256": "d65518c9a4963241ecb90421b4b5e218847dd6a3bf12196974e7a36fd79654b8"
+      "sha256": "ae9e1474c18ccf1e7ce1d53d6d4cb966b943588c89d8c74dd84207200391389d"
     },
     {
       "name": "0002-mooncake-connector.patch",

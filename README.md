@@ -55,7 +55,7 @@ export MODEL_TOKENIZER=/path/to/Qwen3-Coder-30B-A3B-Instruct/tokenizer.json
 ./scripts/build_router.sh
 ```
 
-The engine host must provide Qwen3-Coder-30B-A3B-Instruct, vLLM 0.18.1 with the five patches listed in `engine/vllm-0.18.1-patches.json`, LMCache, Mooncake, eight H20 workers, and the eight KV Events ZMQ endpoints. The exact launch flags and cache segment layout used in the evaluation are documented in `engine/runtime.md`.
+The engine host must provide Qwen3-Coder-30B-A3B-Instruct, vLLM 0.18.1 with the four patches listed in `engine/vllm-0.18.1-patches.json`, LMCache, Mooncake, eight H20 workers, and the eight KV Events ZMQ endpoints. The exact launch flags and cache segment layout used in the evaluation are documented in `engine/runtime.md`.
 
 ## Running the matrix
 
