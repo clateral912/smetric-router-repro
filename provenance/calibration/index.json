@@ -1,7 +1,7 @@
 [
   {
     "run_id": "codex-prefill-400k-vllm-router-native-smetric-default_20260918_180352",
-    "original_local_path": "/mnt/kzlin/workflow/ssched/results/codex-native-400k-pr130-ratefix/codex-prefill-400k-vllm-router-native-smetric-default_20260918_180352",
+    "original_local_path": "<local-results-root>/codex-prefill-400k-vllm-router-native-smetric-default_20260918_180352",
     "sha256": {
       "manifest.json": "0c583e2ef19fd60620bf5866628bdd1222265b333b8a2ae89d7d6aabfae4bdc5",
       "router-provenance.json": "55e06a037ee5aa48b2eb0b50aea400a764ac5d7d49b85b471c84147ba603e5ef",
@@ -15,7 +15,7 @@
   },
   {
     "run_id": "codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_184743",
-    "original_local_path": "/mnt/kzlin/workflow/ssched/results/codex-native-400k-pr130-ratefix/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_184743",
+    "original_local_path": "<local-results-root>/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_184743",
     "sha256": {
       "manifest.json": "dad4b9769a795e38dabbf233e6f7719548b22c54550b77e62c2d1c2ea559fb8d",
       "router-provenance.json": "ae7ff356c5633a1880c3ef770d30ea41bc918b2fdbb91573503bd6f263cd0114",
@@ -29,7 +29,7 @@
   },
   {
     "run_id": "codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_221210",
-    "original_local_path": "/mnt/kzlin/workflow/ssched/results/codex-native-400k-pr130-ratefix-hysteresis/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_221210",
+    "original_local_path": "<local-results-root>/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_221210",
     "sha256": {
       "manifest.json": "65b39d1172c6a6edaecc600994c0f97a2e2369ad7973a5efe1881957ae8e313a",
       "router-provenance.json": "d658dabb243f2d1780ce6b695d059de9ea34a96b66b4deb5d3d94391fbd11c22",
@@ -43,7 +43,7 @@
   },
   {
     "run_id": "codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_231034",
-    "original_local_path": "/mnt/kzlin/workflow/ssched/results/codex-native-400k-pr130-ratefix-gamma11/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_231034",
+    "original_local_path": "<local-results-root>/codex-prefill-400k-vllm-router-native-smetric-optimized_20260918_231034",
     "sha256": {
       "manifest.json": "62b3aa1cdfe073d5240656718a6840245590ec53116051050675f6a48bd47cc4",
       "router-provenance.json": "308f93e64b082926f92ee50e9c840cdddd49881b3d86cce18f1778ee87518c1f",
@@ -57,7 +57,7 @@
   },
   {
     "run_id": "codex-prefill-400k-vllm-router-native-smetric-optimized_20260919_002846",
-    "original_local_path": "/mnt/kzlin/workflow/ssched/results/codex-native-400k-pr130-ratefix-gamma12/codex-prefill-400k-vllm-router-native-smetric-optimized_20260919_002846",
+    "original_local_path": "<local-results-root>/codex-prefill-400k-vllm-router-native-smetric-optimized_20260919_002846",
     "sha256": {
       "manifest.json": "70a7025b77ba64f78c310b79495b554ecffeaad9789e3b0ecb795297e9f91f68",
       "router-provenance.json": "49df752f8ab769798af25e583a77782db26cb66e7b527bc9c39400d0ea9f08f7",
