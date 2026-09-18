@@ -1,0 +1,31 @@
+# Native vLLM Router comparison: each turn decodes exactly the output token
+# count recorded in the trace. EOS is ignored by the shared replayer.
+name: codex-pd-mixed-400k
+trace: traces/codex/steady_warm1200_measure600_n220_seed42.jsonl
+policy: cache_aware
+seed: 42
+mode: replay
+prime_shared_prefix: true
+model: Qwen3-30B-A3B
+replay:
+  dispatch_mode: thinktime
+  prefill_only: false
+  max_duration_s: 2100
+  max_model_len_filter: 400000
+  request_timeout_s: 21600
+backends:
+  type: external
+  instances:
+    - {engine_id: codex-po-0, url: http://127.0.0.1:8000}
+    - {engine_id: codex-po-1, url: http://127.0.0.1:8001}
+    - {engine_id: codex-po-2, url: http://127.0.0.1:8002}
+    - {engine_id: codex-po-3, url: http://127.0.0.1:8003}
+    - {engine_id: codex-po-4, url: http://127.0.0.1:8004}
+    - {engine_id: codex-po-5, url: http://127.0.0.1:8005}
+    - {engine_id: codex-po-6, url: http://127.0.0.1:8006}
+    - {engine_id: codex-po-7, url: http://127.0.0.1:8007}
+scheduler:
+  model: Qwen3-30B-A3B
+  model_tp_size: 1
+  perf_window_s: 300
+output_root: results/codex-po

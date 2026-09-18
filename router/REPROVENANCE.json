@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/vllm-project/router.git",
+  "upstream_release": "v0.1.15",
+  "upstream_commit": "1fbcde7443d75b36befb61bc081f64c2a1f13a4b",
+  "kv_events_pr130_snapshot_commit": "631fd0147549f237a0e9f566ad84e7565d873b79",
+  "source_kind": "self-contained source snapshot; no Redis or Python scheduler is required by the router",
+  "patches": [
+    "../patches/vllm-router-token-prefix.patch",
+    "../patches/vllm-router-placement-header.patch",
+    "../patches/vllm-router-preserve-active-load.patch",
+    "../patches/vllm-router-native-smetric.patch"
+  ],
+  "build": "cargo build --release --locked --bin vllm-router",
+  "snapshot_sha256": "56fea1852b9b97070b2f7e2e9127f24cd6eb55564872c4e9dee3d21b2f790f7d"
+}

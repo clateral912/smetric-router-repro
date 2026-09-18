@@ -1,0 +1,1 @@
+This reproduction package contains original scripts and documentation by the SMetric authors. The `router/` directory is derived from vllm-project/router and remains under its Apache-2.0 license. See router/LICENSE and the upstream repository for third-party notices.

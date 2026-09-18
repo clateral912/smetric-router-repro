@@ -1,0 +1,9 @@
+{
+  "source_dataset": "https://huggingface.co/datasets/Inferact/codex_swebenchpro_traces",
+  "source_file": "codex_swebenchpro.json",
+  "generated": true,
+  "generated_files": {
+    "traces/codex/steady_warm1200_measure600_n220_seed42.jsonl": "bf867df2b851180da9e3658039321b59b99cbe858276732fd33343c331e6b8",
+    "traces/codex/steady_warm1200_measure600_n110_seed42.jsonl": "027fe40c913d7b8c39a269524ad1894e6cba3334f727d09ece5ac8ca50b24b2f"
+  }
+}

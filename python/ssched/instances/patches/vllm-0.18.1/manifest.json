@@ -1,0 +1,71 @@
+{
+  "files": {
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": {
+      "post_sha256": "0ce6f740bec83b6fa9753666783b22d0adfe24348cf2e529dee71fb3bbe49376",
+      "pre_sha256": "f80818612fcc53bb416877a7d214fe031be32f6a8dc33d55b636ae44800331c1"
+    },
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_utils.py": {
+      "post_sha256": "2fe6bd0fd75ad6c2a057e0b9ae2a28b853ee6522ef4733ffa487d944741cbd5b",
+      "pre_sha256": "c1283c96c71748ca541124c6a43afcc45aa22e002456c3c94d7b64548ceead30"
+    },
+    "entrypoints/openai/chat_completion/serving.py": {
+      "post_sha256": "6a1c39522a8248e761efac41fd126a3ff057bfcc5a5490a696c88d258eaa14ef",
+      "pre_sha256": "7c19fe3fc8e6951ebdcaf088695c2351939aea80726630974783ef066c062141"
+    },
+    "entrypoints/openai/completion/serving.py": {
+      "post_sha256": "82653d0c10a6baf1b959773a6109e1b16516d36b49d294ef51301cc3cf26bd84",
+      "pre_sha256": "b8f4665d728b76ce1e8e37655d57260554fc1550ded25c4f8cabf24a2bd0c067"
+    },
+    "entrypoints/openai/engine/protocol.py": {
+      "post_sha256": "c13ba2471eb3ed1d87875b7a5af9f1a2a39ba459b066c9cbec9c8a90f45f83e0",
+      "pre_sha256": "4763cdf78ffb5c54127c4a3ed1ecd44ee6631bae0b8c7087803ddab129edd14a"
+    },
+    "outputs.py": {
+      "post_sha256": "07bce159dec4406ba71ac5fcfda37c24e9ed01239da6f1ddc394064e7096d8a2",
+      "pre_sha256": "991c0960770a619066ccbf469cc08ce1e9523e7fe19e3a116c4cd13c1e1750a0"
+    },
+    "v1/core/sched/scheduler.py": {
+      "post_sha256": "3cc8e7d64c2c863e1f95cdcc2aa6bcee82db19e064a2557c9e16564a864ba307",
+      "pre_sha256": "dd5dd6e7668a2f76ee0e1df92b972196485f2d515acc81d91993e9614f70608f"
+    },
+    "v1/engine/__init__.py": {
+      "post_sha256": "0a547d0c6fc9270a3e6ee13b32f23e0656e64a958767c168ccdfa5fe0dfb9956",
+      "pre_sha256": "d56e7078c3e440fbd2d7aa52d79c7fb336455368cabece8aaa02cb1c0279e5a7"
+    },
+    "v1/engine/output_processor.py": {
+      "post_sha256": "dc2db6f219ad5438caedf44ec2b36d65437c9a57a1343a04eadf42fbfe3e037a",
+      "pre_sha256": "55c69b4c422d58428eb2e06ab27a83bb330583c54253524fb32ba7ff041192a2"
+    },
+    "v1/metrics/stats.py": {
+      "post_sha256": "367a2ca71c6affc9dc553fc5727c0ad82b4f4e842f7c0eaedeef3507f151267c",
+      "pre_sha256": "f0a7650382bccb6fac7d640c0d67ec1992087e371c5e1122553a18263d38ec67"
+    },
+    "v1/request.py": {
+      "post_sha256": "0135e66ef432e10100ed5ddb4cdef14d203a392de10bae55fa0f1229e395c212",
+      "pre_sha256": "84c4c58ad1c140c7975e83ba1f46a950b89975d4f231b76fcd642a4884114a76"
+    }
+  },
+  "patches": [
+    {
+      "name": "0001-external-cached-tokens.patch",
+      "sha256": "cea72d09f45175f465073fd7cf94a14c48f0f4311e068af14c703fd5d5a6d3c3"
+    },
+    {
+      "name": "0002-mooncake-connector.patch",
+      "sha256": "f147064b37c0ab7195d9f82afd052734849e8130cafffd4001c1e800e99209cd"
+    },
+    {
+      "name": "0003-scheduler-hooks.patch",
+      "sha256": "bd99890a2604f7781e9661564c0fc7c4bc91b5deb6b1127bb83ebd4f912ffcd6"
+    },
+    {
+      "name": "0004-engine-state-publisher.patch",
+      "sha256": "9c87b3eba0c595dda524caa13a7680d8f1763bb428a4ced6ffea356426c0ba1b"
+    },
+    {
+      "name": "0005-prompt-token-stats-negative-inc-guard.patch",
+      "sha256": "8a6d652d8f09b8f2fcf0a4d3719a1d66e1e5179fc291ff29e8d90cdbb47d0f0d"
+    }
+  ],
+  "vllm_version": "0.18.1"
+}

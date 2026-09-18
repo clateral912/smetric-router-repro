@@ -1,0 +1,28 @@
+diff --git a/src/routers/http/router.rs b/src/routers/http/router.rs
+index f68e4b0..8c469c9 100644
+--- a/src/routers/http/router.rs
++++ b/src/routers/http/router.rs
+@@ -586,7 +586,7 @@ impl Router {
+                     None
+                 };
+ 
+-                let response = self
++                let mut response = self
+                     .send_typed_request(
+                         headers,
+                         typed_req,
+@@ -614,6 +614,14 @@ impl Router {
+                     }
+                 }
+ 
++                // Benchmark observability only: expose the already selected
++                // destination. This does not participate in worker selection.
++                if let Ok(value) = HeaderValue::from_str(worker.url()) {
++                    response.headers_mut().insert("x-routed-instance", value);
++                }
++                response
++                    .headers_mut()
++                    .insert("x-policy-decision", HeaderValue::from_static(policy.name()));
+                 response
+             },
+             // should_retry predicate

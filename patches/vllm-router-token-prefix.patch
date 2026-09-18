@@ -1,0 +1,79 @@
+diff --git a/src/protocols/spec.rs b/src/protocols/spec.rs
+index d2b4cf7..a8c9fbb 100644
+--- a/src/protocols/spec.rs
++++ b/src/protocols/spec.rs
+@@ -2361,9 +2361,23 @@ impl PromptInput {
+             PromptInput::String(s) => s.clone(),
+             PromptInput::StringArray(arr) => arr.join(" "),
+             PromptInput::IntArray(ids) => {
+-                // Convert token IDs to string representation for routing
+-                // Format: "token_ids:<count>" to indicate this is a token-based prompt
+-                format!("token_ids:{}", ids.len())
++                // Benchmark input adapter: one Unicode scalar per token for
++                // ordinary model vocabularies. This preserves token-prefix
++                // lengths in the existing character-based tree. The prompt
++                // forwarded to the engine remains the original integer array.
++                let mut key = String::new();
++                for &id in ids {
++                    if (0..=0x10f7fe).contains(&id) {
++                        let scalar = id as u32 + if id >= 0xd800 { 0x800 } else { 0 };
++                        key.push(char::from_u32(scalar).unwrap());
++                    } else {
++                        // Reserve the last scalar as an escape for IDs outside
++                        // that vocabulary range; do not collapse distinct IDs.
++                        key.push('\u{10ffff}');
++                        key.push_str(&format!("{id:08x}"));
++                    }
++                }
++                key
+             }
+             PromptInput::IntBatch(batches) => {
+                 // For batches, use total token count
+@@ -2408,6 +2422,47 @@ mod tests {
+     use super::*;
+     use serde_json;
+ 
++    #[test]
++    fn token_prompt_adapter_preserves_prefix_and_payload() {
++        let ids = vec![0, 0xd7ff, 0xd800, 151644, 198];
++        let prompt = PromptInput::IntArray(ids.clone());
++        let key = prompt.extract_text_for_routing();
++        assert_eq!(key.chars().count(), ids.len());
++        assert_eq!(
++            serde_json::to_value(&prompt).unwrap(),
++            serde_json::json!(ids)
++        );
++        let continuation = PromptInput::IntArray(vec![0, 0xd7ff, 0xd800, 151644, 199]);
++        let other = continuation.extract_text_for_routing();
++        assert_eq!(
++            key.chars()
++                .zip(other.chars())
++                .take_while(|(a, b)| a == b)
++                .count(),
++            4
++        );
++        assert_ne!(key, other);
++        let tree = crate::tree::Tree::new();
++        tree.insert(&key, "worker-a");
++        let matched = tree.prefix_match_with_counts(&other);
++        assert_eq!(matched.matched_char_count, 4);
++        assert_eq!(matched.input_char_count, 5);
++        assert_eq!(matched.tenant.as_ref(), "worker-a");
++    }
++
++    #[test]
++    fn token_prompt_adapter_keeps_text_behavior() {
++        assert_eq!(
++            PromptInput::String("abc".into()).extract_text_for_routing(),
++            "abc"
++        );
++        assert_eq!(PromptInput::IntArray(vec![]).extract_text_for_routing(), "");
++        assert_ne!(
++            PromptInput::IntArray(vec![-1]).extract_text_for_routing(),
++            PromptInput::IntArray(vec![0x10f7ff]).extract_text_for_routing()
++        );
++    }
++
+     // ==================================================================
+     // =  InferenceGenerateRequest (/inference/v1/generate) TESTS       =
+     // ==================================================================

@@ -1,0 +1,1 @@
+Raw run directories are intentionally local artifacts. Each contains `manifest.json`, `requests.jsonl`, `router.log`, `engine_state.jsonl`, `workload_audit.json`, and the binary/source hashes needed for audit. Commit only compact aggregate JSON/Markdown reports after all three replicates for each arm are complete.
