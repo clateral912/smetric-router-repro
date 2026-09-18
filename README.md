@@ -28,6 +28,13 @@ Every arm uses the same Router binary, eight TP=1 workers, PR #130-based KV Even
 
 The Router receives only its own request lifecycle state, prefix Tree state, and KV Events. It does not use the Redis observer feed for routing decisions.
 
+The benchmark replayer sends `X-Session-Id` and `X-Session-Turn`. The optimized
+implementation uses the session ID only for a bounded, TTL-limited lease
+hysteresis around the budget boundary; the overload configuration does not use
+that lease. Remove those headers to exercise the stateless Tree-prefix path.
+Claims that SMetric needs no session ID therefore apply to the core Tree-prefix
+decision, not to this optional optimized hysteresis extension.
+
 ## Workloads
 
 The default matrix has two settings:
