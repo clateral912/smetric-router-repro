@@ -8,7 +8,7 @@ The policy is described in [SMetric: Rethink LLM Scheduling for Serving Agents w
 
 ## What is included
 
-- `router/`: self-contained vLLM Router source snapshot. It includes the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the upstream v0.1.15 commit and the source snapshot hash.
+- `router/`: self-contained vLLM Router source snapshot. It includes the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the upstream v0.1.15 commit and the source snapshot hash; `router/SOURCE_DIFF.patch` is the exact source delta from that upstream commit.
 - `patches/`: readable patch files corresponding to the Router adaptations. They document the delta from the upstream release even though the runnable artifact uses the pinned source snapshot to avoid patch-order ambiguity.
 - `python/ssched/`: the request constructor, prompt reconstruction, session-causal replayer, run manifest, engine-state recorder, and workload scoring code. The replayer sends token IDs directly, preserves turn order, and in prefill-only mode retains earlier trace assistant replies in later prompts.
 - `configs/`: the 400K-context prefill-only workload and the 110-session PD-mixed workload. The 220-session PD-mixed configuration is included for extension runs.
