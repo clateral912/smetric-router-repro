@@ -1,0 +1,307 @@
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -234,6 +234,8 @@
+             hash_block_size=self.block_size,
+             metrics_collector=self.kv_metrics_collector,
+         )
++        if self.connector is not None and hasattr(self.connector, "set_block_pool"):
++            self.connector.set_block_pool(self.kv_cache_manager.block_pool)
+         self.use_pp = self.parallel_config.pipeline_parallel_size > 1
+         self.use_v2_model_runner = envs.VLLM_USE_V2_MODEL_RUNNER
+ 
+@@ -285,6 +287,83 @@
+ 
+         self._pause_state: PauseState = PauseState.UNPAUSED
+ 
++        # agentic-kv: optional step-level JSONL logger for B2 interference
++        # analysis. Activated by env vars; no-op otherwise.
++        self._agentic_step_log_fh = None
++        self._agentic_step_id = 0
++        self._agentic_worker_id = None
++        import os as _os
++        self._agentic_decode_token_reservation = (
++            _os.environ.get("AGENTIC_DECODE_TOKEN_RESERVATION", "")
++            .strip()
++            .lower()
++            in {"1", "true", "yes", "on"}
++        )
++        if self._agentic_decode_token_reservation:
++            logger.info("agentic-kv decode token reservation enabled")
++        self._agentic_decode_first_no_mix = (
++            _os.environ.get("AGENTIC_DECODE_FIRST_NO_MIX", "")
++            .strip()
++            .lower()
++            in {"1", "true", "yes", "on"}
++        )
++        if self._agentic_decode_first_no_mix:
++            logger.info("agentic-kv decode-first no-mix scheduling enabled")
++
++        _step_path = _os.environ.get("AGENTIC_STEP_LOG_PATH")
++        if _step_path:
++            try:
++                _os.makedirs(_os.path.dirname(_step_path) or ".", exist_ok=True)
++                self._agentic_step_log_fh = open(_step_path, "a", buffering=1)
++                self._agentic_worker_id = _os.environ.get(
++                    "AGENTIC_WORKER_ID",
++                    f"dp{self.parallel_config.data_parallel_rank}",
++                )
++                logger.info(
++                    "agentic-kv step log enabled: path=%s worker_id=%s",
++                    _step_path, self._agentic_worker_id,
++                )
++            except Exception as _exc:
++                logger.warning("agentic-kv step log disabled (%r)", _exc)
++                self._agentic_step_log_fh = None
++
++    def _agentic_request_needs_decode_token(self, request: Request) -> bool:
++        if request.num_computed_tokens < request.num_prompt_tokens:
++            return False
++        if (
++            request.num_output_placeholders > 0
++            and request.num_computed_tokens + 2 - request.num_output_placeholders
++            >= request.num_prompt_tokens + request.max_tokens
++        ):
++            return False
++        pending_tokens = (
++            request.num_tokens_with_spec
++            + request.num_output_placeholders
++            - request.num_computed_tokens
++        )
++        return pending_tokens > 0 and request.num_computed_tokens < (
++            self.max_model_len - 1
++        )
++
++    def _agentic_decode_reserve_after(self, req_index: int, token_budget: int) -> int:
++        if not self._agentic_decode_token_reservation or token_budget <= 0:
++            return 0
++        reserve = 0
++        for request in self.running[req_index + 1:]:
++            if self._agentic_request_needs_decode_token(request):
++                reserve += 1
++                if reserve >= token_budget:
++                    break
++        return reserve
++
++    def _agentic_has_decode_ready_after(self, req_index: int) -> bool:
++        if not self._agentic_decode_first_no_mix:
++            return False
++        return any(
++            self._agentic_request_needs_decode_token(request)
++            for request in self.running[req_index + 1:]
++        )
++
+     def _mamba_block_aligned_split(
+         self,
+         request: Request,
+@@ -358,6 +437,7 @@
+         if self._pause_state == PauseState.PAUSED_ALL:
+             # Do not schedule any requests when paused.
+             token_budget = 0
++        agentic_step_scheduled_decode = False
+ 
+         # Encoder-related.
+         scheduled_encoder_inputs: dict[str, list[int]] = {}
+@@ -396,8 +476,34 @@
+                 + request.num_output_placeholders
+                 - request.num_computed_tokens
+             )
++            agentic_request_is_prefill = (
++                request.num_computed_tokens < request.num_prompt_tokens
++            )
++            if (
++                self._agentic_decode_first_no_mix
++                and agentic_request_is_prefill
++                and (
++                    agentic_step_scheduled_decode
++                    or self._agentic_has_decode_ready_after(req_index)
++                )
++            ):
++                req_index += 1
++                continue
+             if 0 < self.scheduler_config.long_prefill_token_threshold < num_new_tokens:
+                 num_new_tokens = self.scheduler_config.long_prefill_token_threshold
++            if (
++                self._agentic_decode_token_reservation
++                and num_new_tokens > 1
++                and agentic_request_is_prefill
++            ):
++                decode_reserve = self._agentic_decode_reserve_after(
++                    req_index, token_budget
++                )
++                if decode_reserve > 0:
++                    num_new_tokens = min(
++                        num_new_tokens,
++                        max(0, token_budget - decode_reserve),
++                    )
+             num_new_tokens = min(num_new_tokens, token_budget)
+ 
+             # Make sure the input position does not exceed the max model len.
+@@ -505,6 +611,8 @@
+             req_to_new_blocks[request_id] = new_blocks
+             num_scheduled_tokens[request_id] = num_new_tokens
+             token_budget -= num_new_tokens
++            if not agentic_request_is_prefill:
++                agentic_step_scheduled_decode = True
+             req_index += 1
+ 
+             # Speculative decode related.
+@@ -551,7 +659,14 @@
+             assert len(scheduled_loras) <= self.lora_config.max_loras
+ 
+         # Next, schedule the WAITING requests.
+-        if not preempted_reqs and self._pause_state == PauseState.UNPAUSED:
++        if (
++            not preempted_reqs
++            and self._pause_state == PauseState.UNPAUSED
++            and not (
++                self._agentic_decode_first_no_mix
++                and agentic_step_scheduled_decode
++            )
++        ):
+             step_skipped_waiting = create_request_queue(self.policy)
+ 
+             while (self.waiting or self.skipped_waiting) and token_budget > 0:
+@@ -805,6 +920,11 @@
+                 # Count the number of prefix cached tokens.
+                 if request.num_cached_tokens < 0:
+                     request.num_cached_tokens = num_computed_tokens
++                    # Lock the external (store/L2) part now, before any
++                    # preemption decrements num_external_computed_tokens.
++                    request.num_external_cached_tokens = (
++                        request.num_external_computed_tokens
++                    )
+                 # Encoder-related.
+                 if encoder_inputs_to_schedule:
+                     scheduled_encoder_inputs[request_id] = encoder_inputs_to_schedule
+@@ -924,8 +1044,83 @@
+ 
+         with record_function_or_nullcontext("schedule: update_after_schedule"):
+             self._update_after_schedule(scheduler_output)
++
++        if self._agentic_step_log_fh is not None:
++            self._agentic_emit_step_log(
++                scheduled_timestamp=scheduled_timestamp,
++                num_scheduled_tokens=num_scheduled_tokens,
++                total_num_scheduled_tokens=total_num_scheduled_tokens,
++                scheduled_new_reqs=scheduled_new_reqs,
++                scheduled_resumed_reqs=scheduled_resumed_reqs,
++                scheduled_running_reqs=scheduled_running_reqs,
++                preempted_reqs=preempted_reqs,
++            )
++
+         return scheduler_output
+ 
++    def _agentic_emit_step_log(
++        self,
++        scheduled_timestamp: float,
++        num_scheduled_tokens: dict[str, int],
++        total_num_scheduled_tokens: int,
++        scheduled_new_reqs: list[Request],
++        scheduled_resumed_reqs: list[Request],
++        scheduled_running_reqs: list[Request],
++        preempted_reqs: list[Request],
++    ) -> None:
++        """Emit one JSONL line per scheduler step for agentic-kv B2 analysis.
++
++        Cheap when enabled (a few dozen dict lookups + one write). When the
++        env var AGENTIC_STEP_LOG_PATH is unset the caller does not invoke
++        this method at all.
++        """
++        import json as _json
++        import time as _time
++        new_ids = {r.request_id for r in scheduled_new_reqs}
++        resumed_ids = {r.request_id for r in scheduled_resumed_reqs}
++        running_ids = {r.request_id for r in scheduled_running_reqs}
++        per_req: list[dict[str, Any]] = []
++        prefill_tokens = 0
++        decode_tokens = 0
++        for rid, n in num_scheduled_tokens.items():
++            is_new = rid in new_ids
++            is_resumed = rid in resumed_ids
++            # Heuristic: any step touching a new/resumed request is prefill;
++            # otherwise per-step tokens >1 is chunked prefill, ==1 is decode.
++            if is_new or is_resumed or n > 1:
++                prefill_tokens += n
++                phase = "prefill"
++            else:
++                decode_tokens += n
++                phase = "decode"
++            per_req.append({
++                "rid": rid, "n": n, "phase": phase,
++                "is_new": is_new, "is_resumed": is_resumed,
++            })
++        record = {
++            "t_unix": _time.time(),
++            "t_monotonic": scheduled_timestamp,
++            "step_id": self._agentic_step_id,
++            "worker_id": self._agentic_worker_id,
++            "total_scheduled_tokens": total_num_scheduled_tokens,
++            "prefill_tokens": prefill_tokens,
++            "decode_tokens": decode_tokens,
++            "n_new": len(scheduled_new_reqs),
++            "n_resumed": len(scheduled_resumed_reqs),
++            "n_running_scheduled": len(scheduled_running_reqs),
++            "n_running_total": len(self.running),
++            "n_waiting": len(self.waiting),
++            "n_preempted": len(preempted_reqs),
++            "preempted_ids": [r.request_id for r in preempted_reqs],
++            "per_req": per_req,
++        }
++        try:
++            self._agentic_step_log_fh.write(_json.dumps(record) + "\n")
++        except Exception as _exc:
++            logger.warning("agentic-kv step log write failed (%r)", _exc)
++            self._agentic_step_log_fh = None
++        self._agentic_step_id += 1
++
+     def _preempt_request(self, request: Request, timestamp: float) -> None:
+         """Preempt a request and put it back to the waiting queue.
+ 
+@@ -1441,6 +1636,7 @@
+                         trace_headers=request.trace_headers,
+                         num_cached_tokens=request.num_cached_tokens,
+                         num_external_computed_tokens=request.num_external_computed_tokens,
++                        num_external_cached_tokens=request.num_external_cached_tokens,
+                         routed_experts=routed_experts,
+                         num_nans_in_logits=request.num_nans_in_logits,
+                     )
+@@ -2097,17 +2293,34 @@
+         # KV Connector:: update recv and send status from last step.
+         for req_id in kv_connector_output.finished_recving or ():
+             logger.debug("Finished recving KV transfer for request %s", req_id)
+-            assert req_id in self.requests
++            if req_id not in self.requests:
++                logger.warning("Skipping finished_recving for unknown request %s (already aborted?)", req_id)
++                continue
+             req = self.requests[req_id]
+             if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:
+                 self.finished_recving_kv_req_ids.add(req_id)
+-            else:
+-                assert RequestStatus.is_finished(req.status)
++            elif RequestStatus.is_finished(req.status):
+                 self._free_blocks(self.requests[req_id])
++            else:
++                logger.debug(
++                    "finished_recving for %s in status %s (partial remote prefill?)",
++                    req_id, req.status)
+         for req_id in kv_connector_output.finished_sending or ():
+             logger.debug("Finished sending KV transfer for request %s", req_id)
+-            assert req_id in self.requests
++            if req_id not in self.requests:
++                logger.warning("Skipping finished_sending for unknown request %s (already aborted?)", req_id)
++                continue
++            sent_block_ids: set[int] = set()
++            for group in self.kv_cache_manager.get_block_ids(req_id):
++                sent_block_ids.update(group)
+             self._free_blocks(self.requests[req_id])
++            # e13391e: evict sent blocks from the prefix cache. Intended ONLY for
++            # session MIGRATION (the source worker won't see the session again).
++            # For plain PD-disagg producer->consumer transfers this destroys
++            # cross-turn producer reuse, so it is gated OFF by default and enabled
++            # only for migration experiments via VLLM_EVICT_SENT_BLOCKS=1.
++            if sent_block_ids and __import__("os").environ.get("VLLM_EVICT_SENT_BLOCKS") == "1":
++                self.kv_cache_manager.evict_blocks(sent_block_ids)
+ 
+     def _update_requests_with_invalid_blocks(
+         self,
+

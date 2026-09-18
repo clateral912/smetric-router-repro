@@ -1,4 +1,4 @@
-"""Import the codex SWE-Bench-Pro agent traces into the ssched trace format.
+"""Import the codex SWE-Bench-Pro agent traces into the router replay trace format.
 
 Source: https://huggingface.co/datasets/Inferact/codex_swebenchpro_traces
 (one file, ``codex_swebenchpro.json``: a JSON array of 610 successful
@@ -54,7 +54,7 @@ reproduces the source's reuse structure at 512-token granularity.  Only
 whole blocks get an id; the trailing partial block is left to the
 replayer's per-request padding, as in the Ali traces.
 
-Output is the FULL population.  Load rungs come from ``ssched trace
+Output is the FULL population.  Load rungs come from ``router trace
 sample`` over this file, which already owns the nesting contract.
 """
 
@@ -112,7 +112,7 @@ class NominalService:
     Row timestamps beyond turn 1 are never dispatch inputs in thinktime
     mode -- the replayer waits ``time_to_parent_chat`` after the previous
     turn actually completes.  They exist so that offline tools that crop a
-    window (``ssched trace sample --admit active``) see a plausible
+    window (the trace sampler) see a plausible
     in-flight session, so a coarse model is enough.
     """
 
@@ -161,7 +161,7 @@ class ImportParams:
     # ``pre_roll_seconds`` draws arrivals over [-P, span) instead and crops
     # the emitted rows to t >= 0, so sessions born during the pre-roll
     # enter the trace mid-flight at their first turn after t = 0 -- the
-    # same admit="active" crop the Ali v4 grid uses (ssched trace sample).
+    # same admit="active" crop the Ali v4 grid uses (the trace sampler).
     # The replayer dispatches such a session's first kept turn at its own
     # timestamp and continues closed-loop from there.  ``sessions`` then
     # counts arrivals over the WHOLE [-P, span) span, so the arrival rate
@@ -347,7 +347,7 @@ def import_codex_traces(
     output: Path,
     params: ImportParams,
 ) -> ImportStats:
-    """Convert the ShareGPT dump into a full-population ssched trace."""
+    """Convert the ShareGPT dump into a full-population router trace."""
     from tokenizers import Tokenizer
 
     tokenizer = Tokenizer.from_file(str(tokenizer_path))

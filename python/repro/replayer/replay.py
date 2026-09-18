@@ -1,10 +1,10 @@
-"""Trace replayer — closed-loop, session-causal load against the scheduler.
+"""Trace replayer — closed-loop, session-causal load against the Router.
 
 Ported from the old replayer with two deliberate changes:
   - dispatch_mode defaults to "thinktime" (the faithful closed-loop
     pacing; "tracets" collapses inter-turn think-time under load and
     manufactures artificial bursts — see the old repo's ablation)
-  - a single endpoint (the global scheduler); multi-endpoint round-robin
+  - a single endpoint (the global Router); multi-endpoint round-robin
     is gone — instance selection is the scheduler's job
 
 Per-session sequencing: turns within a session run in order. Mixed
@@ -422,7 +422,7 @@ async def _run_session(
 
 
 async def replay_trace(config: ReplayConfig) -> list[RequestMetrics]:
-    """Main entry: load trace, replay against the scheduler endpoint."""
+    """Main entry: load trace, replay against the Router endpoint."""
     records = load_trace(config.trace_path,
                          request_limit=config.request_limit)
     if not records:
