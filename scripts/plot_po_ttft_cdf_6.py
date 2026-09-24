@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Plot the seven-policy prefill-only TTFT CDF comparison.
+"""Plot the six-policy prefill-only TTFT CDF comparison.
 
-All seven arms pool their three completed replicates. Requests use the same
+All six arms pool their three completed replicates. Requests use the same
 fixed dispatch window and observation horizon as the benchmark summary.
 """
 from __future__ import annotations
@@ -16,7 +16,6 @@ from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD = ROOT / "results/matrix-20260919-rerun/po"
-RR = ROOT / "results/rr-preroll-20260922/po"
 NEW = ROOT / "results/upstream-policies-20260923/po"
 OUT = ROOT / "results/upstream-policies-20260923/plots"
 WINDOW = (1200.0, 1800.0)
@@ -78,19 +77,6 @@ for label, needle, color, zorder in old_specs:
     values = [value for run in runs for value in ttft_in_cohort(run)]
     series.append((label, color, zorder, np.sort(np.asarray(values))))
 
-rr_runs = completed_runs(RR, "vllm-router-native-cache-aware")
-if len(rr_runs) != 3:
-    raise RuntimeError(f"expected 3 completed RR pre-roll runs, found {rr_runs}")
-rr_values = [value for run in rr_runs for value in ttft_in_cohort(run)]
-series.insert(
-    1,
-    (
-        "cache_aware + RR pre-roll",
-        "#A88D8D",
-        2,
-        np.sort(np.asarray(rr_values)),
-    ),
-)
 
 new_specs = [
     ("power_of_two", "power-of-two", "#7B6D8D", 0),
@@ -148,7 +134,7 @@ axins.set_title("0–25 s detail", fontsize=9)
 mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.45", lw=0.9)
 
 OUT.mkdir(parents=True, exist_ok=True)
-stem = OUT / "ttft_cdf_po_7_policies"
+stem = OUT / "ttft_cdf_po_6_policies"
 fig.savefig(stem.with_suffix(".png"), dpi=180)
 fig.savefig(stem.with_suffix(".svg"))
 fig.savefig(stem.with_suffix(".pdf"))

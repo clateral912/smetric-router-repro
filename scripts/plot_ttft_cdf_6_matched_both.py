@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot TTFT and TPOT CDFs for the seven-policy PO and PD-mixed evaluations.
+"""Plot TTFT and TPOT CDFs for the six-policy PO and PD-mixed evaluations.
 
 The original figures use the request intersection across policies within each
 replicate. The additional PD-mixed figures use every request offered by each
@@ -19,7 +19,6 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 OLD_ROOT = ROOT / "results/matrix-20260919-rerun"
-RR_ROOT = ROOT / "results/rr-preroll-20260922"
 NEW_ROOT = ROOT / "results/upstream-policies-20260923"
 OUT = NEW_ROOT / "plots"
 WINDOW = (1200.0, 1800.0)
@@ -31,14 +30,13 @@ SPECS = [
     ("SMetric(default)", "#111111", "*", "-", 7),
     ("SMetric(optimized)", "#D33682", "*", "-", 6),
     ("cache_aware (raw)", "#268BD2", "o", (0, (1, 1.6)), 5),
-    ("cache_aware + RR pre-roll", "#DC322F", "D", (0, (6, 1.6, 1, 1.6)), 4),
     ("power_of_two", "#6C71C4", "s", (0, (3, 1, 1, 1)), 2),
     ("consistent_hash", "#B58900", "v", (0, (4, 1, 1, 1, 1, 1)), 1),
     ("rendezvous_hash", "#2AA198", "X", (0, (2, 1.2)), 3),
 ]
 SETTINGS = {
-    "po": ("Prefill-only", "ttft_cdf_po_7_policies_matched", 600),
-    "pd110": ("PD-mixed", "ttft_cdf_pd110_7_policies_matched", 220),
+    "po": ("Prefill-only", "ttft_cdf_po_6_policies_matched", 600),
+    "pd110": ("PD-mixed", "ttft_cdf_pd110_6_policies_matched", 220),
 }
 
 
@@ -53,12 +51,6 @@ def one(base: Path, needle: str) -> Path:
     return matches[0]
 
 
-def rr_replicate_dir(setting: str, rep: int) -> Path:
-    base = RR_ROOT / setting
-    # The first PO RR run predates the matrix directory convention.
-    if setting == "po" and rep == 1:
-        return base
-    return base / f"replicate-{rep}"
 
 
 def runs_for_replicate(setting: str, rep: int) -> dict[str, Path]:
@@ -66,9 +58,6 @@ def runs_for_replicate(setting: str, rep: int) -> dict[str, Path]:
     new = NEW_ROOT / setting / f"replicate-{rep}"
     return {
         "cache_aware (raw)": one(old, "cache-aware"),
-        "cache_aware + RR pre-roll": one(
-            rr_replicate_dir(setting, rep), "cache-aware"
-        ),
         "SMetric(default)": one(old, "smetric-default"),
         "SMetric(optimized)": one(old, "smetric-optimized"),
         "power_of_two": one(new, "power-of-two"),
@@ -169,7 +158,7 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
 
     for label, color, marker, linestyle, zorder, x, y in series:
         emphasized = label.startswith("SMetric")
-        face = color if emphasized or label == "cache_aware + RR pre-roll" else "none"
+        face = color if emphasized else "none"
         for target, limit, inset in ((ax, main_limit, False), (axins, xmax, True)):
             visible = np.flatnonzero(x <= limit)
             marks = (
@@ -214,8 +203,8 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
     # Matplotlib fills legend columns top-to-bottom: arrange the two stars
     # together in the first visible row, followed by the baseline pairs.
     legend_order = (
-        "SMetric(default)", "cache_aware (raw)", "power_of_two", "rendezvous_hash",
-        "SMetric(optimized)", "cache_aware + RR pre-roll", "consistent_hash",
+        "SMetric(default)", "cache_aware (raw)", "consistent_hash",
+        "SMetric(optimized)", "power_of_two", "rendezvous_hash",
     )
     fig.legend(
         [by_label[name] for name in legend_order],
@@ -276,9 +265,9 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
 def main() -> None:
     for setting, options in SETTINGS.items():
         plot_setting(setting, *options)
-    plot_setting("pd110", "PD-mixed", "ttft_cdf_pd110_7_policies_all", 220,
+    plot_setting("pd110", "PD-mixed", "ttft_cdf_pd110_6_policies_all", 220,
                  per_policy=True)
-    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_7_policies_all", 900,
+    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_6_policies_all", 900,
                  metric="tpot_s", per_policy=True)
 
 
