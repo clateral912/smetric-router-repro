@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Plot matched-cohort TTFT completion CDFs for PO and PD-mixed.
+"""Plot TTFT and TPOT CDFs for the seven-policy PO and PD-mixed evaluations.
 
-Each setting uses all seven policies and three replicates.  Within a replicate,
-the cohort is the intersection of request IDs dispatched in [1200, 1800) by
-every policy.  Missing or failed TTFT observations stay in the denominator as
-probability mass at +infinity.
+The original figures use the request intersection across policies within each
+replicate. The additional PD-mixed figures use every request offered by each
+policy in the same dispatch window. Failed or missing measurements remain at
+infinity in that policy's denominator.
 """
 from __future__ import annotations
 
@@ -103,10 +103,15 @@ def load(run: Path) -> tuple[float, set[str], dict[str, dict], str]:
     )
 
 
-def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
+def plot_setting(setting: str, title: str, filename: str, xmax: int,
+                 metric: str = "ttft_s", per_policy: bool = False) -> None:
     values: dict[str, list[float]] = {label: [] for label, *_ in SPECS}
+    totals = {label: 0 for label, *_ in SPECS}
     replicate_sizes = []
     trace_hashes = set()
+    metric_name = "TPOT" if metric == "tpot_s" else "TTFT"
+    metric_scale = 1000 if metric == "tpot_s" else 1
+    main_limit = 120 if metric == "tpot_s" else 25
 
     for rep in (1, 2, 3):
         loaded = {
@@ -114,34 +119,39 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
             for label, path in runs_for_replicate(setting, rep).items()
         }
         trace_hashes.update(item[3] for item in loaded.values())
-        matched = set.intersection(*(item[1] for item in loaded.values()))
-        replicate_sizes.append(len(matched))
-        for label, (t0, _, terminal, _) in loaded.items():
-            for request_id in matched:
+        common = None if per_policy else set.intersection(
+            *(item[1] for item in loaded.values()))
+        if common is not None:
+            replicate_sizes.append(len(common))
+        for label, (t0, offered, terminal, _) in loaded.items():
+            cohort = offered if per_policy else common
+            totals[label] += len(cohort)
+            for request_id in cohort:
                 row = terminal.get(request_id)
                 if (
                     row is not None
                     and row.get("error") is None
-                    and row.get("ttft_s") is not None
+                    and row.get(metric) is not None
+                    and (metric != "tpot_s"
+                         or (row.get("actual_output_tokens") or 0) > 1)
                     and row.get("latency_s") is not None
                     and float(row["t_dispatch_unix"]) - t0
                     + float(row["latency_s"])
                     <= HORIZON
                 ):
-                    values[label].append(float(row["ttft_s"]))
+                    values[label].append(float(row[metric]) * metric_scale)
 
     if len(trace_hashes) != 1:
         raise RuntimeError(f"{setting} arms use different traces: {trace_hashes}")
-    matched_total = sum(replicate_sizes)
-    if matched_total == 0:
-        raise RuntimeError(f"{setting} has an empty matched cohort")
+    if not all(totals.values()):
+        raise RuntimeError(f"{setting} has an empty offered cohort")
 
-    # Missing and failed requests remain at +infinity in the common matched
-    # denominator; do not renormalize the observed TTFT values.
+    # Failures, unfinished requests, and missing measurements retain their
+    # probability mass at infinity in each policy's offered denominator.
     series = []
     for label, color, marker, linestyle, zorder in SPECS:
         x = np.sort(np.asarray(values[label], dtype=float))
-        y = np.arange(1, len(x) + 1, dtype=float) / matched_total
+        y = np.arange(1, len(x) + 1, dtype=float) / totals[label]
         series.append((label, color, marker, linestyle, zorder, x, y))
 
     mpl.rcParams.update({
@@ -160,7 +170,7 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
     for label, color, marker, linestyle, zorder, x, y in series:
         emphasized = label.startswith("SMetric")
         face = color if emphasized or label == "cache_aware + RR pre-roll" else "none"
-        for target, limit, inset in ((ax, 25, False), (axins, xmax, True)):
+        for target, limit, inset in ((ax, main_limit, False), (axins, xmax, True)):
             visible = np.flatnonzero(x <= limit)
             marks = (
                 visible[np.linspace(0, len(visible) - 1,
@@ -178,13 +188,17 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
                 label=label if not inset else "_nolegend_",
             )
 
-    ax.set_xlim(0, 25)
-    ax.set_xticks([0, 5, 10, 15, 20, 25])
+    ax.set_xlim(0, main_limit)
+    ax.set_xticks(list(range(0, 121, 20)) if metric == "tpot_s"
+                  else [0, 5, 10, 15, 20, 25])
     ax.set_ylim(0, 1.005)
-    ax.set_xlabel("TTFT (s)")
-    ax.set_ylabel("Fraction of matched requests with TTFT ≤ x")
-    ax.set_title(f"{title} TTFT CDF — matched cohort (n={matched_total})",
-                 fontsize=12)
+    ax.set_xlabel("TPOT (ms per output token)" if metric == "tpot_s"
+                  else "TTFT (s)")
+    cohort_label = ("per-policy offered cohorts" if per_policy
+                    else f"matched cohort (n={sum(replicate_sizes)})")
+    ax.set_ylabel(f"Fraction of {'offered' if per_policy else 'matched'} "
+                  f"requests with {metric_name} ≤ x")
+    ax.set_title(f"{title} {metric_name} CDF — {cohort_label}", fontsize=12)
     # Equal offsets in axes coordinates make the arrow parallel to the line
     # joining the x-axis endpoint (1, 0) and y-axis endpoint (0, 1).
     ax.add_patch(FancyArrowPatch(
@@ -203,14 +217,21 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
         "SMetric(default)", "cache_aware (raw)", "power_of_two", "rendezvous_hash",
         "SMetric(optimized)", "cache_aware + RR pre-roll", "consistent_hash",
     )
-    fig.legend([by_label[name] for name in legend_order], legend_order,
-               loc="lower center", bbox_to_anchor=(0.5, 0.025), ncol=2,
-               frameon=False, fontsize=9, handlelength=2.2, columnspacing=1.0)
+    fig.legend(
+        [by_label[name] for name in legend_order],
+        [f"{name} (n={totals[name]})" if per_policy else name
+         for name in legend_order],
+        loc="lower center", bbox_to_anchor=(0.5, 0.025), ncol=2,
+        frameon=False, fontsize=9, handlelength=2.2, columnspacing=1.0,
+    )
 
     axins.set_xlim(0, xmax)
     axins.set_ylim(0, 1.005)
-    axins.set_xticks([0, 200, 400, 600] if setting == "po"
-                     else [0, 50, 100, 150, 200])
+    axins.set_xticks(
+        [0, 200, 400, 600, 800] if metric == "tpot_s"
+        else ([0, 200, 400, 600] if setting == "po"
+              else [0, 50, 100, 150, 200])
+    )
     axins.set_yticks([0, 0.5, 0.7, 0.9, 1.0])
     for level in (0.7, 0.9):
         axins.axhline(level, color="0.45", linestyle=(0, (4, 3)),
@@ -236,14 +257,18 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
     plt.close(fig)
 
     print(
-        f"{setting}: matched per replicate={replicate_sizes}, "
-        f"pooled={matched_total}, trace_sha256={next(iter(trace_hashes))}"
+        f"{setting}: {metric_name}, "
+        + (f"per-policy offered cohorts, trace_sha256={next(iter(trace_hashes))}"
+           if per_policy else
+           f"matched per replicate={replicate_sizes}, "
+           f"pooled={sum(replicate_sizes)}, "
+           f"trace_sha256={next(iter(trace_hashes))}")
     )
     for label, *_ in SPECS:
         observed = len(values[label])
         print(
-            f"  {label}: observed={observed}/{matched_total} "
-            f"({observed / matched_total:.3%})"
+            f"  {label}: observed={observed}/{totals[label]} "
+            f"({observed / totals[label]:.3%})"
         )
     print(stem.with_suffix(".png"))
 
@@ -251,6 +276,10 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
 def main() -> None:
     for setting, options in SETTINGS.items():
         plot_setting(setting, *options)
+    plot_setting("pd110", "PD-mixed", "ttft_cdf_pd110_7_policies_all", 220,
+                 per_policy=True)
+    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_7_policies_all", 900,
+                 metric="tpot_s", per_policy=True)
 
 
 if __name__ == "__main__":
