@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,21 +24,20 @@ OUT = NEW_ROOT / "plots"
 WINDOW = (1200.0, 1800.0)
 HORIZON = 2100.0
 
-# Muted baselines and saturated SMetric colors.  Keep this palette identical
-# across settings so policy identity can be read without rechecking legends.
+# Match the paper's serif type, thin axes, distinct markers, and dash patterns.
+# Show 0–25 s in the main axes and the complete distribution in the inset.
 SPECS = [
-    ("cache_aware (raw)", "#5F6368", 1),
-    ("cache_aware + RR pre-roll", "#A88D8D", 2),
-    ("SMetric(default)", "#00A884", 5),
-    ("SMetric(optimized)", "#D81B60", 6),
-    ("power_of_two", "#7B6D8D", 0),
-    ("consistent_hash", "#C07A3D", 3),
-    ("rendezvous_hash", "#4E79A7", 4),
+    ("SMetric(default)", "#111111", "*", "-", 7),
+    ("SMetric(optimized)", "#D33682", "*", "-", 6),
+    ("cache_aware (raw)", "#268BD2", "o", (0, (1, 1.6)), 5),
+    ("cache_aware + RR pre-roll", "#DC322F", "D", (0, (6, 1.6, 1, 1.6)), 4),
+    ("power_of_two", "#6C71C4", "s", (0, (3, 1, 1, 1)), 2),
+    ("consistent_hash", "#B58900", "v", (0, (4, 1, 1, 1, 1, 1)), 1),
+    ("rendezvous_hash", "#2AA198", "X", (0, (2, 1.2)), 3),
 ]
-
 SETTINGS = {
-    "po": ("Prefill-only", "ttft_cdf_po_7_policies_matched"),
-    "pd110": ("PD-mixed", "ttft_cdf_pd110_7_policies_matched"),
+    "po": ("Prefill-only", "ttft_cdf_po_7_policies_matched", 600),
+    "pd110": ("PD-mixed", "ttft_cdf_pd110_7_policies_matched", 220),
 }
 
 
@@ -103,8 +102,8 @@ def load(run: Path) -> tuple[float, set[str], dict[str, dict], str]:
     )
 
 
-def plot_setting(setting: str, title: str, filename: str) -> None:
-    values: dict[str, list[float]] = {label: [] for label, _, _ in SPECS}
+def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
+    values: dict[str, list[float]] = {label: [] for label, *_ in SPECS}
     replicate_sizes = []
     trace_hashes = set()
 
@@ -136,61 +135,106 @@ def plot_setting(setting: str, title: str, filename: str) -> None:
     if matched_total == 0:
         raise RuntimeError(f"{setting} has an empty matched cohort")
 
-    fig, ax = plt.subplots(figsize=(8.4, 5.6), constrained_layout=True)
+    # Missing and failed requests remain at +infinity in the common matched
+    # denominator; do not renormalize the observed TTFT values.
     series = []
-    for label, color, zorder in SPECS:
-        data = np.sort(np.asarray(values[label], dtype=float))
-        y = np.arange(1, len(data) + 1, dtype=float) / matched_total
-        series.append((label, color, zorder, data, y))
-        ax.step(
-            data,
-            y,
-            where="post",
-            lw=2.5 if label.startswith("SMetric") else 1.7,
-            color=color,
-            zorder=zorder,
-            label=label,
-        )
+    for label, color, marker, linestyle, zorder in SPECS:
+        x = np.sort(np.asarray(values[label], dtype=float))
+        y = np.arange(1, len(x) + 1, dtype=float) / matched_total
+        series.append((label, color, marker, linestyle, zorder, x, y))
 
+    mpl.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Times New Roman", "Times", "STIXGeneral"],
+        "font.size": 10,
+        "mathtext.fontset": "stix",
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+    })
+    fig, ax = plt.subplots(figsize=(8.4, 7.2))
+    fig.subplots_adjust(left=0.12, right=0.98, top=0.94, bottom=0.24)
+    axins = ax.inset_axes([0.58, 0.07, 0.40, 0.29])
+    axins.set_facecolor("white")
+
+    for label, color, marker, linestyle, zorder, x, y in series:
+        emphasized = label.startswith("SMetric")
+        face = color if emphasized or label == "cache_aware + RR pre-roll" else "none"
+        for target, limit, inset in ((ax, 25, False), (axins, xmax, True)):
+            visible = np.flatnonzero(x <= limit)
+            marks = (
+                visible[np.linspace(0, len(visible) - 1,
+                                    min(10, len(visible)), dtype=int)]
+                if len(visible) else []
+            )
+            target.plot(
+                x, y, drawstyle="steps-post", color=color,
+                linestyle=linestyle,
+                linewidth=(1.35 if emphasized else 0.9) * (0.85 if inset else 1),
+                marker=marker, markevery=marks,
+                markersize=(5.2 if emphasized else 4) * (0.8 if inset else 1),
+                markeredgewidth=0.5 if emphasized else 0.4,
+                markerfacecolor=face, zorder=zorder,
+                label=label if not inset else "_nolegend_",
+            )
+
+    ax.set_xlim(0, 25)
+    ax.set_xticks([0, 5, 10, 15, 20, 25])
+    ax.set_ylim(0, 1.005)
     ax.set_xlabel("TTFT (s)")
     ax.set_ylabel("Fraction of matched requests with TTFT ≤ x")
-    ax.set_title(f"{title} TTFT CDF — matched cohort (n={matched_total})")
-    ax.set_ylim(0, 1.005)
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower right", ncol=2, fontsize=8.7, frameon=True)
+    ax.set_title(f"{title} TTFT CDF — matched cohort (n={matched_total})",
+                 fontsize=12)
+    ax.annotate(
+        "Up and left is better",
+        xy=(4.8, 0.26), xytext=(7.8, 0.12),
+        arrowprops={"arrowstyle": "->", "color": "0.25", "linewidth": 0.9},
+        color="0.25", fontsize=10, ha="left", va="center",
+    )
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    # Matplotlib fills legend columns top-to-bottom: arrange the two stars
+    # together in the first visible row, followed by the baseline pairs.
+    legend_order = (
+        "SMetric(default)", "cache_aware (raw)", "power_of_two", "rendezvous_hash",
+        "SMetric(optimized)", "cache_aware + RR pre-roll", "consistent_hash",
+    )
+    fig.legend([by_label[name] for name in legend_order], legend_order,
+               loc="lower center", bbox_to_anchor=(0.5, 0.025), ncol=2,
+               frameon=False, fontsize=9, handlelength=2.2, columnspacing=1.0)
 
-    axins = ax.inset_axes([0.58, 0.46, 0.40, 0.35])
-    for label, color, zorder, data, y in series:
-        axins.step(
-            data,
-            y,
-            where="post",
-            lw=1.7 if label.startswith("SMetric") else 1.1,
-            color=color,
-            zorder=zorder,
-        )
-    axins.set_xlim(0, 25)
+    axins.set_xlim(0, xmax)
     axins.set_ylim(0, 1.005)
-    axins.set_xticks([0, 5, 10, 15, 20, 25])
-    axins.set_yticks([0.7, 0.9])
+    axins.set_xticks([0, 200, 400, 600] if setting == "po"
+                     else [0, 50, 100, 150, 200])
+    axins.set_yticks([0, 0.5, 0.7, 0.9, 1.0])
     for level in (0.7, 0.9):
-        axins.axhline(level, color="0.45", lw=0.8, ls="--", alpha=0.8, zorder=-1)
-    axins.grid(True, alpha=0.25)
-    axins.set_title("0–25 s detail", fontsize=9)
-    mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.45", lw=0.9)
+        axins.axhline(level, color="0.45", linestyle=(0, (4, 3)),
+                      linewidth=0.65, zorder=0)
+
+    for target in (ax, axins):
+        target.tick_params(which="major", width=0.3, length=2, pad=2)
+        target.tick_params(which="minor", length=0)
+        target.minorticks_off()
+        for spine in target.spines.values():
+            spine.set_linewidth(0.3)
+        target.spines["top"].set_visible(False)
+        target.spines["right"].set_visible(False)
+        target.xaxis.grid(color="0.6", linestyle=(0, (5, 8)),
+                          linewidth=0.35, alpha=0.65, zorder=0)
+    ax.yaxis.grid(color="0.6", linestyle=(0, (5, 8)),
+                  linewidth=0.35, alpha=0.65, zorder=0)
 
     OUT.mkdir(parents=True, exist_ok=True)
     stem = OUT / filename
-    fig.savefig(stem.with_suffix(".png"), dpi=180)
-    fig.savefig(stem.with_suffix(".svg"))
-    fig.savefig(stem.with_suffix(".pdf"))
+    for ext in (".png", ".svg", ".pdf"):
+        fig.savefig(stem.with_suffix(ext), dpi=300, bbox_inches="tight")
     plt.close(fig)
 
     print(
         f"{setting}: matched per replicate={replicate_sizes}, "
         f"pooled={matched_total}, trace_sha256={next(iter(trace_hashes))}"
     )
-    for label, _, _ in SPECS:
+    for label, *_ in SPECS:
         observed = len(values[label])
         print(
             f"  {label}: observed={observed}/{matched_total} "
@@ -200,8 +244,8 @@ def plot_setting(setting: str, title: str, filename: str) -> None:
 
 
 def main() -> None:
-    for setting, (title, filename) in SETTINGS.items():
-        plot_setting(setting, title, filename)
+    for setting, options in SETTINGS.items():
+        plot_setting(setting, *options)
 
 
 if __name__ == "__main__":
