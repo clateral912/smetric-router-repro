@@ -13,6 +13,7 @@ from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch
 import numpy as np
 
 
@@ -184,12 +185,16 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int) -> None:
     ax.set_ylabel("Fraction of matched requests with TTFT ≤ x")
     ax.set_title(f"{title} TTFT CDF — matched cohort (n={matched_total})",
                  fontsize=12)
-    ax.annotate(
-        "Up and left is better",
-        xy=(4.8, 0.26), xytext=(7.8, 0.12),
-        arrowprops={"arrowstyle": "->", "color": "0.25", "linewidth": 0.9},
-        color="0.25", fontsize=10, ha="left", va="center",
-    )
+    # Equal offsets in axes coordinates make the arrow parallel to the line
+    # joining the x-axis endpoint (1, 0) and y-axis endpoint (0, 1).
+    ax.add_patch(FancyArrowPatch(
+        (0.35, 0.18), (0.27, 0.26), transform=ax.transAxes,
+        arrowstyle="Simple,tail_width=0.9,head_width=2.1,head_length=1.35",
+        mutation_scale=11, facecolor="0.25", edgecolor="none", zorder=9,
+    ))
+    ax.text(0.385, 0.15, "Up and left is better",
+            transform=ax.transAxes, color="0.25", fontsize=10,
+            ha="left", va="center")
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     # Matplotlib fills legend columns top-to-bottom: arrange the two stars
