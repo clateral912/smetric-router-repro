@@ -5,7 +5,8 @@
   "kv_events_pr130_snapshot_commit": "631fd0147549f237a0e9f566ad84e7565d873b79",
   "source_kind": "self-contained source snapshot; no Redis or Python scheduler is required by the router",
   "source_diff": "SOURCE_DIFF.patch",
-  "source_diff_sha256": "564cfd44f6aae3441812c8ba6d2b3a1c726d460aeece4ccc614125e74d216e66",
+  "source_diff_sha256": "b0793e40b3292865864b8c6ea6f6d1293ef7a4dddeeae8eb9eb63f257d2edfc3",
+  "source_diff_verification": "Fetch v0.1.15 at upstream_commit, run git apply --check SOURCE_DIFF.patch, apply it, then compare the resulting tree byte-for-byte with router/ excluding SOURCE_DIFF.patch, REPROVENANCE.json, target/, and .tokenizer_cache/.",
   "patches": [
     "../patches/vllm-router-token-prefix.patch",
     "../patches/vllm-router-placement-header.patch",
@@ -13,5 +14,6 @@
     "../patches/vllm-router-native-smetric.patch"
   ],
   "build": "cargo build --release --locked --bin vllm-router",
-  "snapshot_sha256": "56fea1852b9b97070b2f7e2e9127f24cd6eb55564872c4e9dee3d21b2f790f7d"
+  "snapshot_hash_method": "sha256 of a deterministic ustar archive of router/ excluding SOURCE_DIFF.patch, REPROVENANCE.json, target/, and .tokenizer_cache/; archive entries sorted by name with epoch mtime and numeric uid/gid 0",
+  "snapshot_sha256": "a7f161d5585224f333af7d0eaca6d169f37860e610da04af8bcba4114149e99b"
 }

@@ -1588,10 +1588,18 @@ index d606ebc..b3c7ee9 100644
  
          if len(router_args.prefill_urls) == 0 or len(router_args.decode_urls) == 0:
 diff --git a/py_src/vllm_router/router.py b/py_src/vllm_router/router.py
-index 5d92b90..98cd345 100644
+index 5d92b90..74a4ef4 100644
 --- a/py_src/vllm_router/router.py
 +++ b/py_src/vllm_router/router.py
-@@ -68,6 +68,7 @@ class Router:
+@@ -15,6 +15,7 @@ def policy_from_str(policy_str: Optional[str]) -> PolicyType:
+         "cache_aware": PolicyType.CacheAware,
+         "power_of_two": PolicyType.PowerOfTwo,
+         "consistent_hash": PolicyType.ConsistentHash,
++        "rendezvous_hash": PolicyType.RendezvousHash,
+     }
+     return policy_map[policy_str]
+ 
+@@ -68,6 +69,7 @@ class Router:
              for decode servers (PD mode only). Default: {}
          prometheus_port: Port to expose Prometheus metrics. Default: None
          prometheus_host: Host address to bind the Prometheus metrics server. Default: None
@@ -1599,7 +1607,7 @@ index 5d92b90..98cd345 100644
          vllm_pd_disaggregation: Enable vLLM PD (Prefill-Decode) disaggregated mode. Default: False
          prefill_urls: List of (url, bootstrap_port) tuples for prefill servers (PD mode only)
          decode_urls: List of URLs for decode servers (PD mode only)
-@@ -91,6 +92,8 @@ class Router:
+@@ -91,6 +93,8 @@ class Router:
          health_check_timeout_secs: Timeout in seconds for health check requests. Default: 5
          health_check_interval_secs: Interval in seconds between runtime health checks. Default: 60
          health_check_endpoint: Health check endpoint path. Default: '/health'
@@ -1608,7 +1616,7 @@ index 5d92b90..98cd345 100644
      """
  
      def __init__(self, router: Optional[_Router] = None, **kwargs):
-@@ -114,15 +117,21 @@ class Router:
+@@ -114,15 +118,21 @@ class Router:
          # Convert RouterArgs to _Router parameters
          args_dict["worker_urls"] = (
              []
@@ -1634,7 +1642,7 @@ index 5d92b90..98cd345 100644
          args_dict["prefill_policy"] = policy_from_str(args_dict["prefill_policy"])
          args_dict["decode_policy"] = policy_from_str(args_dict["decode_policy"])
 diff --git a/py_src/vllm_router/router_args.py b/py_src/vllm_router/router_args.py
-index 5771bf4..1f13663 100644
+index 5771bf4..1b96049 100644
 --- a/py_src/vllm_router/router_args.py
 +++ b/py_src/vllm_router/router_args.py
 @@ -15,6 +15,7 @@ class RouterArgs:
@@ -1666,7 +1674,31 @@ index 5771bf4..1f13663 100644
  
      @staticmethod
      def add_cli_args(
-@@ -176,6 +176,11 @@ class RouterArgs:
+@@ -140,6 +140,7 @@ class RouterArgs:
+                 "cache_aware",
+                 "power_of_two",
+                 "consistent_hash",
++                "rendezvous_hash",
+             ],
+             help="Load balancing policy to use. In PD mode, this is used for both prefill and decode unless overridden",
+         )
+@@ -153,6 +154,7 @@ class RouterArgs:
+                 "cache_aware",
+                 "power_of_two",
+                 "consistent_hash",
++                "rendezvous_hash",
+             ],
+             help="Specific policy for prefill nodes in PD mode. If not specified, uses the main policy",
+         )
+@@ -166,6 +168,7 @@ class RouterArgs:
+                 "cache_aware",
+                 "power_of_two",
+                 "consistent_hash",
++                "rendezvous_hash",
+             ],
+             help="Specific policy for decode nodes in PD mode. If not specified, uses the main policy",
+         )
+@@ -176,6 +179,11 @@ class RouterArgs:
              action="store_true",
              help="Enable MiniLB",
          )
@@ -1678,7 +1710,7 @@ index 5771bf4..1f13663 100644
          parser.add_argument(
              f"--{prefix}vllm-pd-disaggregation",
              action="store_true",
-@@ -311,23 +316,6 @@ class RouterArgs:
+@@ -311,23 +319,6 @@ class RouterArgs:
              default={},
              help="Label selector for decode server pods in PD mode (format: key1=value1 key2=value2)",
          )
@@ -1702,7 +1734,7 @@ index 5771bf4..1f13663 100644
          # Prometheus configuration
          parser.add_argument(
              f"--{prefix}prometheus-port",
-@@ -472,6 +460,19 @@ class RouterArgs:
+@@ -472,6 +463,19 @@ class RouterArgs:
              default=[],
              help="CORS allowed origins (e.g., http://localhost:3000 https://example.com)",
          )
@@ -1722,7 +1754,7 @@ index 5771bf4..1f13663 100644
  
      @classmethod
      def from_cli_args(
-@@ -519,9 +520,9 @@ class RouterArgs:
+@@ -519,9 +523,9 @@ class RouterArgs:
  
      def _validate_router_args(self):
          # Validate configuration based on mode
@@ -2539,7 +2571,7 @@ index bdd1592..43afaa0 100644
        - http://10.2.1.155:8000
        - --decode
 diff --git a/src/config/types.rs b/src/config/types.rs
-index 413022f..f52ba6d 100644
+index 413022f..5ec2d16 100644
 --- a/src/config/types.rs
 +++ b/src/config/types.rs
 @@ -68,6 +68,10 @@ pub struct RouterConfig {
@@ -2674,12 +2706,11 @@ index 413022f..f52ba6d 100644
              RoutingMode::VllmPrefillDecode { decode_policy, .. } => {
                  decode_policy.as_ref().unwrap_or(main_policy)
              }
-@@ -244,8 +261,90 @@ pub enum PolicyConfig {
-         virtual_nodes: u32,
-     },
+@@ -246,6 +263,91 @@ pub enum PolicyConfig {
  
--    #[serde(rename = "rendezvous_hash")]
--    RendezvousHash,
+     #[serde(rename = "rendezvous_hash")]
+     RendezvousHash,
++
 +    /// KV-aware routing backed by real-time KV events from vLLM.
 +    /// Requires `kv_events` to be enabled in the routing mode configuration.
 +    #[serde(rename = "kv_aware")]
@@ -2767,11 +2798,10 @@ index 413022f..f52ba6d 100644
  }
  
  impl PolicyConfig {
-@@ -256,7 +355,68 @@ impl PolicyConfig {
-             PolicyConfig::CacheAware { .. } => "cache_aware",
+@@ -257,6 +359,68 @@ impl PolicyConfig {
              PolicyConfig::PowerOfTwo { .. } => "power_of_two",
              PolicyConfig::ConsistentHash { .. } => "consistent_hash",
--            PolicyConfig::RendezvousHash => "rendezvous_hash",
+             PolicyConfig::RendezvousHash => "rendezvous_hash",
 +            PolicyConfig::KvAware { .. } => "kv_aware",
 +            PolicyConfig::SMetric(_) => "smetric",
 +        }
@@ -2837,7 +2867,7 @@ index 413022f..f52ba6d 100644
          }
      }
  }
-@@ -447,6 +607,7 @@ impl Default for RouterConfig {
+@@ -447,6 +611,7 @@ impl Default for RouterConfig {
          Self {
              mode: RoutingMode::Regular {
                  worker_urls: vec![],
@@ -2845,7 +2875,7 @@ index 413022f..f52ba6d 100644
              },
              policy: PolicyConfig::Random,
              host: "127.0.0.1".to_string(),
-@@ -475,10 +636,11 @@ impl Default for RouterConfig {
+@@ -475,10 +640,11 @@ impl Default for RouterConfig {
              health_check: HealthCheckConfig::default(),
              enable_igw: false,
              connection_mode: ConnectionMode::Http,
@@ -2858,7 +2888,7 @@ index 413022f..f52ba6d 100644
          }
      }
  }
-@@ -502,6 +664,7 @@ impl RouterConfig {
+@@ -502,6 +668,7 @@ impl RouterConfig {
      pub fn mode_type(&self) -> &'static str {
          match self.mode {
              RoutingMode::Regular { .. } => "regular",
@@ -2866,7 +2896,7 @@ index 413022f..f52ba6d 100644
              RoutingMode::VllmPrefillDecode { .. } => "vllm_prefill_decode",
              RoutingMode::OpenAI { .. } => "openai",
          }
-@@ -552,7 +715,7 @@ mod tests {
+@@ -552,7 +719,7 @@ mod tests {
          let config = RouterConfig::default();
  
          assert!(
@@ -2875,7 +2905,7 @@ index 413022f..f52ba6d 100644
          );
          assert!(matches!(config.policy, PolicyConfig::Random));
          assert_eq!(config.host, "127.0.0.1");
-@@ -571,13 +734,14 @@ mod tests {
+@@ -571,13 +738,14 @@ mod tests {
      fn test_router_config_new() {
          let mode = RoutingMode::Regular {
              worker_urls: vec!["http://worker1".to_string(), "http://worker2".to_string()],
@@ -2891,7 +2921,7 @@ index 413022f..f52ba6d 100644
                  assert_eq!(worker_urls.len(), 2);
                  assert_eq!(worker_urls[0], "http://worker1");
                  assert_eq!(worker_urls[1], "http://worker2");
-@@ -596,6 +760,7 @@ mod tests {
+@@ -596,6 +764,7 @@ mod tests {
          let config = RouterConfig {
              mode: RoutingMode::Regular {
                  worker_urls: vec!["http://worker1".to_string()],
@@ -2899,7 +2929,7 @@ index 413022f..f52ba6d 100644
              },
              policy: PolicyConfig::Random,
              host: "0.0.0.0".to_string(),
-@@ -624,15 +789,15 @@ mod tests {
+@@ -624,15 +793,15 @@ mod tests {
      fn test_routing_mode_is_pd_mode() {
          let regular = RoutingMode::Regular {
              worker_urls: vec!["http://worker1".to_string()],
@@ -2917,7 +2947,7 @@ index 413022f..f52ba6d 100644
          };
          assert!(pd.is_pd_mode());
      }
-@@ -645,10 +810,11 @@ mod tests {
+@@ -645,10 +814,11 @@ mod tests {
                  "http://worker2".to_string(),
                  "http://worker3".to_string(),
              ],
@@ -2930,7 +2960,7 @@ index 413022f..f52ba6d 100644
              prefill_urls: vec![
                  ("http://prefill1".to_string(), Some(8001)),
                  ("http://prefill2".to_string(), None),
-@@ -660,12 +826,12 @@ mod tests {
+@@ -660,12 +830,12 @@ mod tests {
              ],
              prefill_policy: None,
              decode_policy: None,
@@ -2944,7 +2974,7 @@ index 413022f..f52ba6d 100644
          };
          assert_eq!(empty_regular.worker_count(), 0);
      }
-@@ -675,21 +841,21 @@ mod tests {
+@@ -675,21 +845,21 @@ mod tests {
          // Test Regular mode
          let regular = RoutingMode::Regular {
              worker_urls: vec!["http://worker1".to_string()],
@@ -2970,7 +3000,7 @@ index 413022f..f52ba6d 100644
          assert!(json.contains("\"prefill_urls\""));
          assert!(json.contains("\"decode_urls\""));
      }
-@@ -714,6 +880,7 @@ mod tests {
+@@ -714,6 +884,7 @@ mod tests {
              load_check_interval_secs: 60,
          };
          assert_eq!(power_of_two.name(), "power_of_two");
@@ -2978,7 +3008,7 @@ index 413022f..f52ba6d 100644
      }
  
      #[test]
-@@ -743,6 +910,14 @@ mod tests {
+@@ -743,6 +914,14 @@ mod tests {
          let json = serde_json::to_string(&power_of_two).unwrap();
          assert!(json.contains("\"type\":\"power_of_two\""));
          assert!(json.contains("\"load_check_interval_secs\":60"));
@@ -2993,7 +3023,7 @@ index 413022f..f52ba6d 100644
      }
  
      #[test]
-@@ -874,22 +1049,22 @@ mod tests {
+@@ -874,22 +1053,22 @@ mod tests {
          let config = RouterConfig {
              mode: RoutingMode::Regular {
                  worker_urls: vec![],
@@ -3019,7 +3049,7 @@ index 413022f..f52ba6d 100644
      }
  
      #[test]
-@@ -936,6 +1111,7 @@ mod tests {
+@@ -936,6 +1115,7 @@ mod tests {
  
          let mode = RoutingMode::Regular {
              worker_urls: large_urls.clone(),
@@ -3027,7 +3057,7 @@ index 413022f..f52ba6d 100644
          };
  
          assert_eq!(mode.worker_count(), 1000);
-@@ -950,7 +1126,7 @@ mod tests {
+@@ -950,7 +1130,7 @@ mod tests {
          let deserialized: RouterConfig = serde_json::from_str(&json).unwrap();
  
          match deserialized.mode {
@@ -3036,7 +3066,7 @@ index 413022f..f52ba6d 100644
                  assert_eq!(worker_urls.len(), 1000);
              }
              _ => panic!("Expected Regular mode"),
-@@ -962,6 +1138,7 @@ mod tests {
+@@ -962,6 +1142,7 @@ mod tests {
          let config = RouterConfig {
              mode: RoutingMode::Regular {
                  worker_urls: vec!["http://работник1".to_string(), "http://工作者2".to_string()],
@@ -3044,7 +3074,7 @@ index 413022f..f52ba6d 100644
              },
              log_dir: Some("/日志/目录".to_string()),
              ..Default::default()
-@@ -971,7 +1148,7 @@ mod tests {
+@@ -971,7 +1152,7 @@ mod tests {
          let deserialized: RouterConfig = serde_json::from_str(&json).unwrap();
  
          match deserialized.mode {
@@ -3053,7 +3083,7 @@ index 413022f..f52ba6d 100644
                  assert_eq!(worker_urls[0], "http://работник1");
                  assert_eq!(worker_urls[1], "http://工作者2");
              }
-@@ -1000,7 +1177,7 @@ mod tests {
+@@ -1000,7 +1181,7 @@ mod tests {
      #[test]
      fn test_full_pd_mode_config() {
          let config = RouterConfig {
@@ -3062,7 +3092,7 @@ index 413022f..f52ba6d 100644
                  prefill_urls: vec![
                      ("http://prefill1:8000".to_string(), Some(8001)),
                      ("http://prefill2:8000".to_string(), None),
-@@ -1011,7 +1188,6 @@ mod tests {
+@@ -1011,7 +1192,6 @@ mod tests {
                  ],
                  prefill_policy: None,
                  decode_policy: None,
@@ -3070,7 +3100,7 @@ index 413022f..f52ba6d 100644
              },
              policy: PolicyConfig::PowerOfTwo {
                  load_check_interval_secs: 30,
-@@ -1049,10 +1225,11 @@ mod tests {
+@@ -1049,10 +1229,11 @@ mod tests {
              queue_timeout_secs: 60,
              rate_limit_tokens_per_second: None,
              connection_mode: ConnectionMode::Http,
@@ -3083,7 +3113,7 @@ index 413022f..f52ba6d 100644
          };
  
          assert!(config.mode.is_pd_mode());
-@@ -1074,6 +1251,7 @@ mod tests {
+@@ -1074,6 +1255,7 @@ mod tests {
                      "http://worker2:8000".to_string(),
                      "http://worker3:8000".to_string(),
                  ],
@@ -3091,7 +3121,7 @@ index 413022f..f52ba6d 100644
              },
              policy: PolicyConfig::CacheAware {
                  cache_threshold: 0.9,
-@@ -1115,10 +1293,11 @@ mod tests {
+@@ -1115,10 +1297,11 @@ mod tests {
              queue_timeout_secs: 60,
              rate_limit_tokens_per_second: None,
              connection_mode: ConnectionMode::Http,
@@ -3104,7 +3134,7 @@ index 413022f..f52ba6d 100644
          };
  
          assert!(!config.mode.is_pd_mode());
-@@ -1137,6 +1316,7 @@ mod tests {
+@@ -1137,6 +1320,7 @@ mod tests {
          let config = RouterConfig {
              mode: RoutingMode::Regular {
                  worker_urls: vec!["http://worker1".to_string()],
@@ -3112,7 +3142,7 @@ index 413022f..f52ba6d 100644
              },
              policy: PolicyConfig::RoundRobin,
              host: "::1".to_string(), // IPv6
-@@ -1177,10 +1357,11 @@ mod tests {
+@@ -1177,10 +1361,11 @@ mod tests {
              queue_timeout_secs: 60,
              rate_limit_tokens_per_second: None,
              connection_mode: ConnectionMode::Http,
@@ -3125,7 +3155,7 @@ index 413022f..f52ba6d 100644
          };
  
          assert!(config.has_service_discovery());
-@@ -1204,7 +1385,7 @@ mod tests {
+@@ -1204,7 +1389,7 @@ mod tests {
      #[test]
      fn test_pd_policy_fallback_both_specified() {
          // When both prefill and decode policies are specified, they should be used
@@ -3134,7 +3164,7 @@ index 413022f..f52ba6d 100644
              prefill_urls: vec![("http://prefill1".to_string(), None)],
              decode_urls: vec!["http://decode1".to_string()],
              prefill_policy: Some(PolicyConfig::CacheAware {
-@@ -1217,7 +1398,6 @@ mod tests {
+@@ -1217,7 +1402,6 @@ mod tests {
              decode_policy: Some(PolicyConfig::PowerOfTwo {
                  load_check_interval_secs: 60,
              }),
@@ -3142,7 +3172,7 @@ index 413022f..f52ba6d 100644
          };
  
          let main_policy = PolicyConfig::Random;
-@@ -1237,7 +1417,7 @@ mod tests {
+@@ -1237,7 +1421,7 @@ mod tests {
      #[test]
      fn test_pd_policy_fallback_only_prefill() {
          // When only prefill policy is specified, decode should use main policy
@@ -3151,7 +3181,7 @@ index 413022f..f52ba6d 100644
              prefill_urls: vec![("http://prefill1".to_string(), None)],
              decode_urls: vec!["http://decode1".to_string()],
              prefill_policy: Some(PolicyConfig::CacheAware {
-@@ -1248,7 +1428,6 @@ mod tests {
+@@ -1248,7 +1432,6 @@ mod tests {
                  max_tree_size: 1000,
              }),
              decode_policy: None,
@@ -3159,7 +3189,7 @@ index 413022f..f52ba6d 100644
          };
  
          let main_policy = PolicyConfig::RoundRobin;
-@@ -1269,14 +1448,13 @@ mod tests {
+@@ -1269,14 +1452,13 @@ mod tests {
      #[test]
      fn test_pd_policy_fallback_only_decode() {
          // When only decode policy is specified, prefill should use main policy
@@ -3175,7 +3205,7 @@ index 413022f..f52ba6d 100644
          };
  
          let main_policy = PolicyConfig::Random;
-@@ -1297,12 +1475,11 @@ mod tests {
+@@ -1297,12 +1479,11 @@ mod tests {
      #[test]
      fn test_pd_policy_fallback_none_specified() {
          // When no specific policies are specified, both should use main policy
@@ -3189,7 +3219,7 @@ index 413022f..f52ba6d 100644
          };
  
          let main_policy = PolicyConfig::CacheAware {
-@@ -1338,6 +1515,7 @@ mod tests {
+@@ -1338,6 +1519,7 @@ mod tests {
          // For regular mode, the helper methods should just return the main policy
          let regular = RoutingMode::Regular {
              worker_urls: vec!["http://worker1".to_string()],
@@ -3198,7 +3228,7 @@ index 413022f..f52ba6d 100644
  
          let main_policy = PolicyConfig::RoundRobin;
 diff --git a/src/config/validation.rs b/src/config/validation.rs
-index bf678a5..d785438 100644
+index bf678a5..6d5939e 100644
 --- a/src/config/validation.rs
 +++ b/src/config/validation.rs
 @@ -42,7 +42,7 @@ impl ConfigValidator {
@@ -3284,6 +3314,15 @@ index bf678a5..d785438 100644
                      });
                  }
              }
+@@ -126,7 +178,7 @@ impl ConfigValidator {
+     /// Validate policy configuration
+     fn validate_policy(policy: &PolicyConfig) -> ConfigResult<()> {
+         match policy {
+-            PolicyConfig::Random | PolicyConfig::RoundRobin => {
++            PolicyConfig::Random | PolicyConfig::RoundRobin | PolicyConfig::RendezvousHash => {
+                 // No specific validation needed
+             }
+             PolicyConfig::CacheAware {
 @@ -188,8 +240,77 @@ impl ConfigValidator {
                      });
                  }
@@ -5511,7 +5550,7 @@ index 0000000..0e8732e
 +    );
 +}
 diff --git a/src/lib.rs b/src/lib.rs
-index 5c4c406..5442898 100644
+index 5c4c406..02dd844 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -5,6 +5,10 @@ use std::collections::HashMap;
@@ -5525,15 +5564,16 @@ index 5c4c406..5442898 100644
  pub mod metrics;
  pub mod middleware;
  pub mod otel_http;
-@@ -26,6 +30,7 @@ pub enum PolicyType {
+@@ -26,6 +30,8 @@ pub enum PolicyType {
      CacheAware,
      PowerOfTwo,
      ConsistentHash,
++    RendezvousHash,
 +    KvAware,
  }
  
  #[pyclass]
-@@ -60,8 +65,8 @@ struct Router {
+@@ -60,8 +66,8 @@ struct Router {
      prometheus_host: Option<String>,
      request_timeout_secs: u64,
      request_id_headers: Option<Vec<String>>,
@@ -5543,7 +5583,7 @@ index 5c4c406..5442898 100644
      prefill_urls: Option<Vec<(String, Option<u16>)>>,
      decode_urls: Option<Vec<String>>,
      prefill_policy: Option<PolicyType>,
-@@ -92,14 +97,30 @@ struct Router {
+@@ -92,14 +98,30 @@ struct Router {
      queue_size: usize,
      queue_timeout_secs: u64,
      rate_limit_tokens_per_second: Option<usize>,
@@ -5576,10 +5616,11 @@ index 5c4c406..5442898 100644
      /// Convert PyO3 Router to RouterConfig
      pub fn to_router_config(&self) -> config::ConfigResult<config::RouterConfig> {
          use config::{
-@@ -124,6 +145,12 @@ impl Router {
+@@ -124,6 +146,13 @@ impl Router {
                  PolicyType::ConsistentHash => ConfigPolicyConfig::ConsistentHash {
                      virtual_nodes: 160, // Default value
                  },
++                PolicyType::RendezvousHash => ConfigPolicyConfig::RendezvousHash,
 +                PolicyType::KvAware => ConfigPolicyConfig::KvAware {
 +                    block_size: 16,           // Default value
 +                    hash_seed: 0,             // Default value
@@ -5589,7 +5630,7 @@ index 5c4c406..5442898 100644
              }
          };
  
-@@ -132,18 +159,62 @@ impl Router {
+@@ -132,18 +161,62 @@ impl Router {
              // IGW mode - routing mode is not used in IGW, but we need to provide a placeholder
              RoutingMode::Regular {
                  worker_urls: vec![],
@@ -5653,7 +5694,7 @@ index 5c4c406..5442898 100644
              }
          };
  
-@@ -180,7 +251,7 @@ impl Router {
+@@ -180,7 +253,7 @@ impl Router {
              policy,
              host: self.host.clone(),
              port: self.port,
@@ -5662,7 +5703,7 @@ index 5c4c406..5442898 100644
              max_payload_size: self.max_payload_size,
              request_timeout_secs: self.request_timeout_secs,
              worker_startup_timeout_secs: self.worker_startup_timeout_secs,
-@@ -221,22 +292,11 @@ impl Router {
+@@ -221,22 +294,11 @@ impl Router {
                  endpoint: self.health_check_endpoint.clone(),
              },
              enable_igw: self.enable_igw,
@@ -5687,7 +5728,7 @@ index 5c4c406..5442898 100644
          })
      }
  }
-@@ -273,8 +333,8 @@ impl Router {
+@@ -273,8 +335,8 @@ impl Router {
          prometheus_host = None,
          request_timeout_secs = 1800,  // Add configurable request timeout
          request_id_headers = None,  // Custom request ID headers
@@ -5697,7 +5738,7 @@ index 5c4c406..5442898 100644
          prefill_urls = None,
          decode_urls = None,
          prefill_policy = None,
-@@ -305,11 +365,12 @@ impl Router {
+@@ -305,11 +367,12 @@ impl Router {
          queue_size = 100,
          queue_timeout_secs = 60,
          rate_limit_tokens_per_second = None,
@@ -5712,7 +5753,7 @@ index 5c4c406..5442898 100644
      ))]
      #[allow(clippy::too_many_arguments)]
      fn new(
-@@ -341,8 +402,8 @@ impl Router {
+@@ -341,8 +404,8 @@ impl Router {
          prometheus_host: Option<String>,
          request_timeout_secs: u64,
          request_id_headers: Option<Vec<String>>,
@@ -5722,7 +5763,7 @@ index 5c4c406..5442898 100644
          prefill_urls: Option<Vec<(String, Option<u16>)>>,
          decode_urls: Option<Vec<String>>,
          prefill_policy: Option<PolicyType>,
-@@ -369,10 +430,28 @@ impl Router {
+@@ -369,10 +432,28 @@ impl Router {
          queue_size: usize,
          queue_timeout_secs: u64,
          rate_limit_tokens_per_second: Option<usize>,
@@ -5752,7 +5793,7 @@ index 5c4c406..5442898 100644
          Ok(Router {
              host,
              port,
-@@ -402,8 +481,8 @@ impl Router {
+@@ -402,8 +483,8 @@ impl Router {
              prometheus_host,
              request_timeout_secs,
              request_id_headers,
@@ -5762,7 +5803,7 @@ index 5c4c406..5442898 100644
              prefill_urls,
              decode_urls,
              prefill_policy,
-@@ -430,9 +509,11 @@ impl Router {
+@@ -430,9 +511,11 @@ impl Router {
              queue_size,
              queue_timeout_secs,
              rate_limit_tokens_per_second,
@@ -5775,7 +5816,7 @@ index 5c4c406..5442898 100644
          })
      }
  
-@@ -458,8 +539,8 @@ impl Router {
+@@ -458,8 +541,8 @@ impl Router {
                  check_interval: std::time::Duration::from_secs(60),
                  port: self.service_discovery_port,
                  namespace: self.service_discovery_namespace.clone(),
@@ -5787,7 +5828,7 @@ index 5c4c406..5442898 100644
                  decode_selector: self.decode_selector.clone(),
                  bootstrap_port_annotation: self.bootstrap_port_annotation.clone(),
 diff --git a/src/main.rs b/src/main.rs
-index a642898..8ba471e 100644
+index a642898..b7df912 100644
 --- a/src/main.rs
 +++ b/src/main.rs
 @@ -2,8 +2,8 @@ use clap::{ArgAction, Parser, ValueEnum};
@@ -5829,7 +5870,7 @@ index a642898..8ba471e 100644
  
      /// Load balancing policy to use
 -    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash"])]
-+    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
++    #[arg(long, default_value = "cache_aware", value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash", "kv_aware", "smetric"])]
      policy: String,
  
 +    /// Enable PD (Prefill-Decode) disaggregated mode
@@ -5844,12 +5885,12 @@ index a642898..8ba471e 100644
  
      /// Specific policy for prefill nodes in PD mode
 -    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash"])]
-+    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
++    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash", "kv_aware", "smetric"])]
      prefill_policy: Option<String>,
  
      /// Specific policy for decode nodes in PD mode
 -    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash"])]
-+    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "kv_aware", "smetric"])]
++    #[arg(long, value_parser = ["random", "round_robin", "cache_aware", "power_of_two", "consistent_hash", "rendezvous_hash", "kv_aware", "smetric"])]
      decode_policy: Option<String>,
  
      /// Timeout in seconds for worker startup
@@ -6008,11 +6049,10 @@ index a642898..8ba471e 100644
      /// Convert policy string to PolicyConfig
      fn parse_policy(&self, policy_str: &str) -> PolicyConfig {
          match policy_str {
-@@ -372,7 +510,37 @@ impl CliArgs {
-             "consistent_hash" => PolicyConfig::ConsistentHash {
+@@ -373,6 +511,37 @@ impl CliArgs {
                  virtual_nodes: 160, // Default value
              },
--            "rendezvous_hash" => PolicyConfig::RendezvousHash,
+             "rendezvous_hash" => PolicyConfig::RendezvousHash,
 +            "kv_aware" => PolicyConfig::KvAware {
 +                block_size: self.kv_block_size,
 +                hash_seed: self.kv_hash_seed,
@@ -6047,7 +6087,7 @@ index a642898..8ba471e 100644
              _ => PolicyConfig::RoundRobin, // Fallback
          }
      }
-@@ -382,17 +550,71 @@ impl CliArgs {
+@@ -382,17 +551,71 @@ impl CliArgs {
          &self,
          prefill_urls: Vec<(String, Option<u16>)>,
      ) -> ConfigResult<RouterConfig> {
@@ -6119,7 +6159,7 @@ index a642898..8ba471e 100644
          } else if self.vllm_pd_disaggregation {
              // Use decode URLs from CLI arguments (already parsed by clap)
              let decode_urls = &self.decode;
-@@ -446,6 +668,25 @@ impl CliArgs {
+@@ -446,6 +669,25 @@ impl CliArgs {
                  prefill_policy: self.prefill_policy.as_ref().map(|p| self.parse_policy(p)),
                  decode_policy: self.decode_policy.as_ref().map(|p| self.parse_policy(p)),
                  discovery_address: self.vllm_discovery_address.clone(),
@@ -6145,7 +6185,7 @@ index a642898..8ba471e 100644
              }
          } else {
              // Regular mode
-@@ -457,6 +698,18 @@ impl CliArgs {
+@@ -457,6 +699,18 @@ impl CliArgs {
              }
              RoutingMode::Regular {
                  worker_urls: self.worker_urls.clone(),
@@ -6164,7 +6204,7 @@ index a642898..8ba471e 100644
              }
          };
  
-@@ -485,7 +738,40 @@ impl CliArgs {
+@@ -485,7 +739,40 @@ impl CliArgs {
              host: self.prometheus_host.clone(),
          });
  
@@ -6206,7 +6246,7 @@ index a642898..8ba471e 100644
  
          let api_key_validation_urls = if !self.api_key_validation_urls.is_empty() {
              self.api_key_validation_urls.clone()
-@@ -550,13 +836,14 @@ impl CliArgs {
+@@ -550,13 +837,14 @@ impl CliArgs {
              },
              enable_igw: self.enable_igw,
              rate_limit_tokens_per_second: None,
@@ -6222,7 +6262,7 @@ index a642898..8ba471e 100644
          })
      }
  
-@@ -570,8 +857,8 @@ impl CliArgs {
+@@ -570,8 +858,8 @@ impl CliArgs {
                  check_interval: std::time::Duration::from_secs(60),
                  port: self.service_discovery_port,
                  namespace: self.service_discovery_namespace.clone(),
@@ -6233,7 +6273,7 @@ index a642898..8ba471e 100644
                  prefill_selector: Self::parse_selector(&self.prefill_selector),
                  decode_selector: Self::parse_selector(&self.decode_selector),
                  bootstrap_port_annotation: "vllm.ai/bootstrap-port".to_string(),
-@@ -657,6 +944,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+@@ -657,6 +945,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
      println!("DEBUG: Filtered args: {:?}", filtered_args);
      let cli_args = CliArgs::parse_from(filtered_args);
      println!("DEBUG: CLI args parsed successfully");
@@ -6241,7 +6281,7 @@ index a642898..8ba471e 100644
      println!(
          "DEBUG: vllm_pd_disaggregation: {}",
          cli_args.vllm_pd_disaggregation
-@@ -671,6 +959,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
+@@ -671,6 +960,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
          "OpenAI Backend".to_string()
      } else if cli_args.vllm_pd_disaggregation {
          "vLLM PD Disaggregated".to_string()
@@ -6250,7 +6290,7 @@ index a642898..8ba471e 100644
      } else {
          format!("Regular ({})", cli_args.backend)
      };
-@@ -691,7 +981,7 @@ Provide --worker-urls or PD flags as usual.",
+@@ -691,7 +982,7 @@ Provide --worker-urls or PD flags as usual.",
      if !cli_args.enable_igw {
          println!("Policy: {}", cli_args.policy);
  
@@ -6462,7 +6502,7 @@ index dc209a1..1e16ced 100644
 +    }
  }
 diff --git a/src/policies/consistent_hash.rs b/src/policies/consistent_hash.rs
-index 62ff12c..779eb6c 100644
+index 62ff12c..c57619a 100644
 --- a/src/policies/consistent_hash.rs
 +++ b/src/policies/consistent_hash.rs
 @@ -11,14 +11,13 @@ use tracing::debug;
@@ -6481,15 +6521,6 @@ index 62ff12c..779eb6c 100644
  
  /// Consistent hashing policy
  ///
-@@ -230,7 +229,7 @@ impl ConsistentHashPolicy {
-     }
- 
-     /// Facebook-style hash function using furc_hash for consistent hashing
--    pub fn fbi_hash(key: &str) -> u64 {
-+    fn fbi_hash(key: &str) -> u64 {
-         // Use furc_hash with a large modulus to get good distribution
-         // Then expand to u64 for our hash ring
-         const LARGE_MODULUS: u32 = (1u32 << 23) - 1; // Max furc_hash modulus
 @@ -313,6 +312,241 @@ impl ConsistentHashPolicy {
          selected_worker
      }
@@ -6770,7 +6801,7 @@ index 62ff12c..779eb6c 100644
      fn test_consistent_hash_selection() {
          let policy = ConsistentHashPolicy::new();
 diff --git a/src/policies/factory.rs b/src/policies/factory.rs
-index 08ff2d8..5562486 100644
+index 08ff2d8..009ff94 100644
 --- a/src/policies/factory.rs
 +++ b/src/policies/factory.rs
 @@ -2,7 +2,7 @@
@@ -6778,7 +6809,7 @@ index 08ff2d8..5562486 100644
  use super::{
      CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
 -    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy,
-+    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
++    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy, SMetricPolicy,
  };
  use crate::config::PolicyConfig;
  use std::sync::Arc;
@@ -6796,11 +6827,10 @@ index 08ff2d8..5562486 100644
      pub fn create_from_config(config: &PolicyConfig) -> Arc<dyn LoadBalancingPolicy> {
          match config {
              PolicyConfig::Random => Arc::new(RandomPolicy::new()),
-@@ -38,7 +43,19 @@ impl PolicyFactory {
-                 // The consistent hash policy uses a hardcoded value for now
+@@ -39,6 +44,19 @@ impl PolicyFactory {
                  Arc::new(ConsistentHashPolicy::new())
              }
--            PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
+             PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
 +            PolicyConfig::KvAware { .. } => {
 +                // KvAwarePolicy requires KVBlockIndex + tokenizer which are only
 +                // available in the VllmPrefillDecode router path.  Use a
@@ -6817,18 +6847,17 @@ index 08ff2d8..5562486 100644
          }
      }
  
-@@ -50,7 +67,9 @@ impl PolicyFactory {
-             "power_of_two" | "poweroftwo" => Some(Arc::new(PowerOfTwoPolicy::new())),
+@@ -51,6 +69,9 @@ impl PolicyFactory {
              "cache_aware" | "cacheaware" => Some(Arc::new(CacheAwarePolicy::new())),
              "consistent_hash" | "consistenthash" => Some(Arc::new(ConsistentHashPolicy::new())),
--            "rendezvous_hash" | "rendezvoushash" => Some(Arc::new(RendezvousHashPolicy::new())),
+             "rendezvous_hash" | "rendezvoushash" => Some(Arc::new(RendezvousHashPolicy::new())),
 +            // "kv_aware" is not available via name lookup because
 +            // it requires external dependencies (index, tokenizer).
 +            "smetric" => Some(Arc::new(SMetricPolicy::new())),
              _ => None,
          }
      }
-@@ -90,10 +109,6 @@ mod tests {
+@@ -90,10 +111,6 @@ mod tests {
          let policy =
              PolicyFactory::create_from_config(&PolicyConfig::ConsistentHash { virtual_nodes: 160 });
          assert_eq!(policy.name(), "consistent_hash");
@@ -6839,7 +6868,7 @@ index 08ff2d8..5562486 100644
      }
  
      #[test]
-@@ -108,8 +123,10 @@ mod tests {
+@@ -108,8 +125,10 @@ mod tests {
          assert!(PolicyFactory::create_by_name("CacheAware").is_some());
          assert!(PolicyFactory::create_by_name("consistent_hash").is_some());
          assert!(PolicyFactory::create_by_name("ConsistentHash").is_some());
@@ -6852,491 +6881,6 @@ index 08ff2d8..5562486 100644
          assert!(PolicyFactory::create_by_name("unknown").is_none());
      }
  }
-diff --git a/src/policies/hash_key.rs b/src/policies/hash_key.rs
-deleted file mode 100644
-index 08c8d31..0000000
---- a/src/policies/hash_key.rs
-+++ /dev/null
-@@ -1,479 +0,0 @@
--//! Shared hash key extraction for consistent hashing policies
--//!
--//! Extracts routing keys from HTTP headers and request bodies.
--//! Used by both ConsistentHashPolicy and RendezvousHashPolicy.
--
--use super::RequestHeaders;
--use crate::policies::ConsistentHashPolicy;
--use tracing::debug;
--
--/// HTTP header names to check for session ID (case-insensitive, checked in order)
--pub(crate) const SESSION_HEADER_NAMES: &[&str] = &[
--    "x-session-id",
--    "x-user-id",
--    "x-tenant-id",
--    "x-correlation-id", // per-session — check before per-request
--    "x-request-id",
--    "x-trace-id",
--];
--
--/// Extract hash key with priority: HTTP headers > body fields > request content hash
--///
--/// Priority order:
--/// 1. HTTP Headers: x-session-id, x-user-id, x-tenant-id, x-correlation-id, x-request-id, x-trace-id
--/// 2. Body: session_params.session_id (nested)
--/// 3. Body: user field (OpenAI format)
--/// 4. Body: session_id (legacy)
--/// 5. Body: user_id (legacy)
--/// 6. Fallback: hash of request body (long) or raw text (short)
--pub(crate) fn extract_hash_key(
--    request_text: Option<&str>,
--    headers: Option<&RequestHeaders>,
--) -> String {
--    // 1. First priority: HTTP headers
--    if let Some(hdrs) = headers {
--        if let Some(key) = extract_hash_key_from_headers(hdrs) {
--            return key;
--        }
--    }
--
--    // 2. Second priority: Body fields
--    if let Some(key) = extract_hash_key_from_body(request_text) {
--        return key;
--    }
--
--    // 3. Final fallback: hash of request body
--    let text = request_text.unwrap_or("");
--    if text.len() > 100 {
--        format!("request_hash:{:016x}", ConsistentHashPolicy::fbi_hash(text))
--    } else {
--        format!("request:{}", text)
--    }
--}
--
--/// Extract hash key from HTTP headers
--pub(crate) fn extract_hash_key_from_headers(headers: &RequestHeaders) -> Option<String> {
--    for header_name in SESSION_HEADER_NAMES {
--        if let Some(value) = headers.get(*header_name) {
--            if !value.is_empty() {
--                debug!(
--                    "Hash key extraction: found session key in header '{}': {}",
--                    header_name, value
--                );
--                return Some(format!("header:{}:{}", header_name, value));
--            }
--        }
--    }
--    None
--}
--
--/// Extract hash key from request body fields
--///
--/// Priority: session_params.session_id > user > session_id > user_id
--pub(crate) fn extract_hash_key_from_body(request_text: Option<&str>) -> Option<String> {
--    let text = request_text.unwrap_or("");
--    if text.is_empty() {
--        return None;
--    }
--
--    // 1. Try to extract session_params.session_id first (highest priority in body)
--    if let Some(session_id) = extract_nested_field_value(text, "session_params", "session_id") {
--        debug!(
--            "Hash key extraction: found session_params.session_id: {}",
--            session_id
--        );
--        return Some(format!("session:{}", session_id));
--    }
--
--    // 2. Try to extract direct user field (from OpenAI ChatCompletion/Completion requests)
--    if let Some(user) = extract_field_value(text, "user") {
--        debug!("Hash key extraction: found user field: {}", user);
--        return Some(format!("user:{}", user));
--    }
--
--    // 3. Fallback: try legacy session_id field
--    if let Some(session_id) = extract_field_value(text, "session_id") {
--        return Some(format!("session:{}", session_id));
--    }
--
--    // 4. Fallback: try legacy user_id field
--    if let Some(user_id) = extract_field_value(text, "user_id") {
--        return Some(format!("user:{}", user_id));
--    }
--
--    None
--}
--
--/// Extract nested field value like session_params.session_id from JSON text
--pub(crate) fn extract_nested_field_value(
--    text: &str,
--    parent_field: &str,
--    child_field: &str,
--) -> Option<String> {
--    if let Some(parent_start) = find_field_start(text, parent_field) {
--        if let Some(obj_start) = text[parent_start..].find('{') {
--            let obj_start_pos = parent_start + obj_start;
--            if let Some(obj_content) = extract_json_object(&text[obj_start_pos..]) {
--                return extract_field_value(&obj_content, child_field);
--            }
--        }
--    }
--    None
--}
--
--/// Find the start position after the colon of a field in JSON text
--pub(crate) fn find_field_start(text: &str, field_name: &str) -> Option<usize> {
--    let patterns = [format!("\"{}\"", field_name), format!("'{}'", field_name)];
--
--    for pattern in &patterns {
--        if let Some(field_pos) = text.find(pattern) {
--            let after_field = &text[field_pos + pattern.len()..];
--            for (i, ch) in after_field.char_indices() {
--                if ch == ':' {
--                    return Some(field_pos + pattern.len() + i + 1);
--                } else if !ch.is_whitespace() {
--                    break;
--                }
--            }
--        }
--    }
--    None
--}
--
--/// Extract JSON object content (simple brace matching)
--pub(crate) fn extract_json_object(text: &str) -> Option<String> {
--    if !text.starts_with('{') {
--        return None;
--    }
--
--    let mut brace_count = 0;
--    let mut end_pos = 0;
--
--    for (i, ch) in text.char_indices() {
--        match ch {
--            '{' => brace_count += 1,
--            '}' => {
--                brace_count -= 1;
--                if brace_count == 0 {
--                    end_pos = i + 1;
--                    break;
--                }
--            }
--            _ => {}
--        }
--    }
--
--    if brace_count == 0 && end_pos > 0 {
--        Some(text[0..end_pos].to_string())
--    } else {
--        None
--    }
--}
--
--/// Extract field value from JSON-like text (simple parser)
--///
--/// Supports double-quoted, single-quoted, and unquoted values.
--pub(crate) fn extract_field_value(text: &str, field_name: &str) -> Option<String> {
--    let patterns = [
--        format!("\"{}\"", field_name),
--        format!("'{}'", field_name),
--        field_name.to_string(),
--    ];
--
--    for pattern in &patterns {
--        if let Some(field_pos) = text.find(pattern) {
--            let after_field = &text[field_pos + pattern.len()..];
--
--            // Skip whitespace and look for colon
--            let mut colon_pos = None;
--            for (i, ch) in after_field.char_indices() {
--                if ch == ':' {
--                    colon_pos = Some(i);
--                    break;
--                } else if !ch.is_whitespace() {
--                    break;
--                }
--            }
--
--            if let Some(colon_idx) = colon_pos {
--                let after_colon = &after_field[colon_idx + 1..];
--                let trimmed = after_colon.trim_start();
--
--                // Extract quoted string (double or single quotes)
--                if trimmed.starts_with('"') {
--                    if let Some(stripped) = trimmed.strip_prefix('"') {
--                        if let Some(end_quote) = stripped.find('"') {
--                            return Some(stripped[..end_quote].to_string());
--                        }
--                    }
--                } else if trimmed.starts_with('\'') {
--                    if let Some(stripped) = trimmed.strip_prefix('\'') {
--                        if let Some(end_quote) = stripped.find('\'') {
--                            return Some(stripped[..end_quote].to_string());
--                        }
--                    }
--                } else {
--                    // Unquoted value - extract until delimiter
--                    let end_pos = trimmed
--                        .find(&[',', ' ', '}', ']', '\n', '\r', '\t'][..])
--                        .unwrap_or(trimmed.len());
--                    if end_pos > 0 {
--                        return Some(trimmed[..end_pos].to_string());
--                    }
--                }
--            }
--        }
--    }
--
--    None
--}
--
--#[cfg(test)]
--mod tests {
--    use super::*;
--    use std::collections::HashMap;
--
--    // === extract_field_value tests ===
--
--    #[test]
--    fn test_extract_field_value_double_quoted() {
--        let text = r#"{"session_id": "abc123", "prompt": "hello"}"#;
--        assert_eq!(
--            extract_field_value(text, "session_id"),
--            Some("abc123".to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_field_value_single_quoted() {
--        let text = r#"{'session_id': 'def456', 'prompt': 'world'}"#;
--        assert_eq!(
--            extract_field_value(text, "session_id"),
--            Some("def456".to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_field_value_unquoted() {
--        let text = r#"{"count": 42, "name": "test"}"#;
--        assert_eq!(extract_field_value(text, "count"), Some("42".to_string()));
--    }
--
--    #[test]
--    fn test_extract_field_value_missing() {
--        let text = r#"{"other": "val"}"#;
--        assert_eq!(extract_field_value(text, "session_id"), None);
--    }
--
--    #[test]
--    fn test_extract_field_value_no_space_after_colon() {
--        let text = r#"{"session_id":"compact_value"}"#;
--        assert_eq!(
--            extract_field_value(text, "session_id"),
--            Some("compact_value".to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_field_value_multiple_fields() {
--        let text = r#"{"user": "bob", "prompt": "hi", "session_id": "sess1"}"#;
--        assert_eq!(extract_field_value(text, "user"), Some("bob".to_string()));
--        assert_eq!(
--            extract_field_value(text, "session_id"),
--            Some("sess1".to_string())
--        );
--    }
--
--    // === extract_nested_field_value tests ===
--
--    #[test]
--    fn test_extract_nested_field_value() {
--        let text = r#"{"session_params": {"session_id": "nested123"}, "prompt": "hi"}"#;
--        assert_eq!(
--            extract_nested_field_value(text, "session_params", "session_id"),
--            Some("nested123".to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_nested_field_value_missing_parent() {
--        let text = r#"{"prompt": "hi"}"#;
--        assert_eq!(
--            extract_nested_field_value(text, "session_params", "session_id"),
--            None
--        );
--    }
--
--    #[test]
--    fn test_extract_nested_field_value_missing_child() {
--        let text = r#"{"session_params": {"other": "val"}, "prompt": "hi"}"#;
--        assert_eq!(
--            extract_nested_field_value(text, "session_params", "session_id"),
--            None
--        );
--    }
--
--    // === extract_json_object tests ===
--
--    #[test]
--    fn test_extract_json_object_simple() {
--        let text = r#"{"key": "value"} trailing"#;
--        assert_eq!(
--            extract_json_object(text),
--            Some(r#"{"key": "value"}"#.to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_json_object_nested() {
--        let text = r#"{"outer": {"inner": "val"}} trailing"#;
--        assert_eq!(
--            extract_json_object(text),
--            Some(r#"{"outer": {"inner": "val"}}"#.to_string())
--        );
--    }
--
--    #[test]
--    fn test_extract_json_object_not_object() {
--        assert_eq!(extract_json_object("not json"), None);
--    }
--
--    #[test]
--    fn test_extract_json_object_unclosed() {
--        assert_eq!(extract_json_object("{unclosed"), None);
--    }
--
--    // === extract_hash_key_from_headers tests ===
--
--    #[test]
--    fn test_header_extraction_priority() {
--        let mut headers = HashMap::new();
--        headers.insert("x-request-id".to_string(), "req-1".to_string());
--        headers.insert("x-session-id".to_string(), "sess-1".to_string());
--
--        // x-session-id has higher priority than x-request-id
--        let key = extract_hash_key_from_headers(&headers).unwrap();
--        assert_eq!(key, "header:x-session-id:sess-1");
--    }
--
--    #[test]
--    fn test_header_extraction_skips_empty() {
--        let mut headers = HashMap::new();
--        headers.insert("x-session-id".to_string(), "".to_string());
--        headers.insert("x-user-id".to_string(), "user-1".to_string());
--
--        let key = extract_hash_key_from_headers(&headers).unwrap();
--        assert_eq!(key, "header:x-user-id:user-1");
--    }
--
--    #[test]
--    fn test_header_extraction_no_match() {
--        let mut headers = HashMap::new();
--        headers.insert("x-custom-header".to_string(), "val".to_string());
--        assert_eq!(extract_hash_key_from_headers(&headers), None);
--    }
--
--    // === extract_hash_key_from_body tests ===
--
--    #[test]
--    fn test_body_extraction_session_params_priority() {
--        // session_params.session_id takes priority over direct session_id
--        let text = r#"{"session_params": {"session_id": "nested"}, "session_id": "direct"}"#;
--        let key = extract_hash_key_from_body(Some(text)).unwrap();
--        assert_eq!(key, "session:nested");
--    }
--
--    #[test]
--    fn test_body_extraction_user_field() {
--        let text = r#"{"user": "alice", "prompt": "hi"}"#;
--        let key = extract_hash_key_from_body(Some(text)).unwrap();
--        assert_eq!(key, "user:alice");
--    }
--
--    #[test]
--    fn test_body_extraction_legacy_session_id() {
--        let text = r#"{"session_id": "legacy123", "prompt": "hi"}"#;
--        let key = extract_hash_key_from_body(Some(text)).unwrap();
--        assert_eq!(key, "session:legacy123");
--    }
--
--    #[test]
--    fn test_body_extraction_legacy_user_id() {
--        let text = r#"{"user_id": "uid456", "prompt": "hi"}"#;
--        let key = extract_hash_key_from_body(Some(text)).unwrap();
--        assert_eq!(key, "user:uid456");
--    }
--
--    #[test]
--    fn test_body_extraction_empty() {
--        assert_eq!(extract_hash_key_from_body(None), None);
--        assert_eq!(extract_hash_key_from_body(Some("")), None);
--    }
--
--    #[test]
--    fn test_body_extraction_no_known_fields() {
--        let text = r#"{"prompt": "hello", "model": "llama"}"#;
--        assert_eq!(extract_hash_key_from_body(Some(text)), None);
--    }
--
--    // === extract_hash_key (top-level) tests ===
--
--    #[test]
--    fn test_hash_key_headers_over_body() {
--        let mut headers = HashMap::new();
--        headers.insert("x-session-id".to_string(), "from-header".to_string());
--        let body = r#"{"session_id": "from-body"}"#;
--
--        let key = extract_hash_key(Some(body), Some(&headers));
--        assert_eq!(key, "header:x-session-id:from-header");
--    }
--
--    #[test]
--    fn test_hash_key_fallback_short_text() {
--        let key = extract_hash_key(Some("short"), None);
--        assert_eq!(key, "request:short");
--    }
--
--    #[test]
--    fn test_hash_key_fallback_long_text() {
--        let long_text = "x".repeat(200);
--        let key = extract_hash_key(Some(&long_text), None);
--        assert!(key.starts_with("request_hash:"));
--        assert_eq!(key.len(), "request_hash:".len() + 16); // 16 hex chars
--
--        // Same long text should produce same hash
--        let key2 = extract_hash_key(Some(&long_text), None);
--        assert_eq!(key, key2);
--    }
--
--    #[test]
--    fn test_hash_key_fallback_none() {
--        let key = extract_hash_key(None, None);
--        assert_eq!(key, "request:");
--    }
--
--    // === find_field_start tests ===
--
--    #[test]
--    fn test_find_field_start_double_quoted() {
--        let text = r#"{"field": "value"}"#;
--        let pos = find_field_start(text, "field");
--        assert!(pos.is_some());
--        // Should point to after the colon
--        let after = &text[pos.unwrap()..];
--        assert!(after.trim_start().starts_with('"'));
--    }
--
--    #[test]
--    fn test_find_field_start_single_quoted() {
--        let text = r#"{'field': 'value'}"#;
--        let pos = find_field_start(text, "field");
--        assert!(pos.is_some());
--    }
--
--    #[test]
--    fn test_find_field_start_missing() {
--        let text = r#"{"other": "value"}"#;
--        assert_eq!(find_field_start(text, "field"), None);
--    }
--}
 diff --git a/src/policies/kv_aware.rs b/src/policies/kv_aware.rs
 new file mode 100644
 index 0000000..896c828
@@ -7541,19 +7085,18 @@ index 0000000..896c828
 +    }
 +}
 diff --git a/src/policies/mod.rs b/src/policies/mod.rs
-index 5948176..9100b94 100644
+index 5948176..5cf9b4f 100644
 --- a/src/policies/mod.rs
 +++ b/src/policies/mod.rs
-@@ -11,22 +11,22 @@ use std::sync::Arc;
- mod cache_aware;
+@@ -12,21 +12,24 @@ mod cache_aware;
  mod consistent_hash;
  mod factory;
--mod hash_key;
+ mod hash_key;
 +pub mod kv_aware;
  mod power_of_two;
  mod random;
  mod registry;
--mod rendezvous_hash;
+ mod rendezvous_hash;
  mod round_robin;
 +mod smetric;
  
@@ -7565,13 +7108,13 @@ index 5948176..9100b94 100644
  pub use power_of_two::PowerOfTwoPolicy;
  pub use random::RandomPolicy;
  pub use registry::PolicyRegistry;
--pub use rendezvous_hash::RendezvousHashPolicy;
+ pub use rendezvous_hash::RendezvousHashPolicy;
  pub use round_robin::RoundRobinPolicy;
 +pub use smetric::{SMetricConfig, SMetricPolicy};
  
  /// HTTP headers passed to policies for routing decisions
  /// Key is lowercase header name, value is header value
-@@ -89,14 +89,41 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
+@@ -89,14 +92,41 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
          Some((prefill_idx, decode_idx))
      }
  
@@ -7618,7 +7161,7 @@ index 5948176..9100b94 100644
      /// Get policy name for metrics and debugging
      fn name(&self) -> &'static str;
  
-@@ -139,6 +166,9 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
+@@ -139,6 +169,9 @@ pub trait LoadBalancingPolicy: Send + Sync + Debug {
      fn init_workers(&self, _workers: &[Arc<dyn Worker>]) {
          // Default: no-op for policies that don't need initialization
      }
@@ -7629,7 +7172,7 @@ index 5948176..9100b94 100644
  
  /// Configuration for cache-aware policy
 diff --git a/src/policies/registry.rs b/src/policies/registry.rs
-index fb75901..4ffacb1 100644
+index fb75901..5d968fa 100644
 --- a/src/policies/registry.rs
 +++ b/src/policies/registry.rs
 @@ -6,7 +6,7 @@
@@ -7637,7 +7180,7 @@ index fb75901..4ffacb1 100644
  use super::{
      CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
 -    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy,
-+    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
++    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy, SMetricPolicy,
  };
  use crate::config::types::PolicyConfig;
  use std::collections::HashMap;
@@ -7684,11 +7227,10 @@ index fb75901..4ffacb1 100644
      }
  
      /// Create a policy from a type string
-@@ -172,10 +177,10 @@ impl PolicyRegistry {
-             "random" => Arc::new(RandomPolicy::new()),
+@@ -173,9 +178,10 @@ impl PolicyRegistry {
              "cache_aware" => Arc::new(CacheAwarePolicy::new()),
              "power_of_two" => Arc::new(PowerOfTwoPolicy::new()),
--            "rendezvous_hash" => Arc::new(RendezvousHashPolicy::new()),
+             "rendezvous_hash" => Arc::new(RendezvousHashPolicy::new()),
 +            "smetric" => Arc::new(SMetricPolicy::new()),
              _ => {
                  warn!("Unknown policy type '{}', using default", policy_type);
@@ -7697,11 +7239,10 @@ index fb75901..4ffacb1 100644
              }
          }
      }
-@@ -203,7 +208,21 @@ impl PolicyRegistry {
-             }
+@@ -204,6 +210,21 @@ impl PolicyRegistry {
              PolicyConfig::PowerOfTwo { .. } => Arc::new(PowerOfTwoPolicy::new()),
              PolicyConfig::ConsistentHash { .. } => Arc::new(ConsistentHashPolicy::new()),
--            PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
+             PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
 +            PolicyConfig::KvAware { .. } => {
 +                // KvAwarePolicy requires KVBlockIndex + tokenizer which are only
 +                // available in the VllmPrefillDecode router path.  When the
@@ -7720,7 +7261,7 @@ index fb75901..4ffacb1 100644
          }
      }
  
-@@ -265,7 +284,10 @@ impl std::fmt::Debug for PolicyRegistry {
+@@ -265,7 +286,10 @@ impl std::fmt::Debug for PolicyRegistry {
          f.debug_struct("PolicyRegistry")
              .field("model_policies", &self.model_policies)
              .field("model_worker_counts", &self.model_worker_counts)
@@ -7732,7 +7273,7 @@ index fb75901..4ffacb1 100644
              .finish()
      }
  }
-@@ -295,6 +317,9 @@ mod tests {
+@@ -295,6 +319,9 @@ mod tests {
          assert_eq!(mappings.get("llama-3").unwrap(), "cache_aware");
          assert_eq!(mappings.get("gpt-4").unwrap(), "random");
  
@@ -7742,241 +7283,6 @@ index fb75901..4ffacb1 100644
          // Check worker counts
          let counts = registry.get_worker_counts();
          assert_eq!(*counts.get("llama-3").unwrap(), 2);
-diff --git a/src/policies/rendezvous_hash.rs b/src/policies/rendezvous_hash.rs
-deleted file mode 100644
-index e6599ae..0000000
---- a/src/policies/rendezvous_hash.rs
-+++ /dev/null
-@@ -1,229 +0,0 @@
--//! Rendezvous hashing (Highest Random Weight) load balancing policy
--//!
--//! Routes requests to workers by scoring each worker with a hash of the
--//! session key combined with the worker URL, then picking the highest score.
--//! This provides better balance than ring-based consistent hashing with
--//! zero tuning knobs, while preserving session stickiness and minimal
--//! redistribution (~1/n) on worker add/remove.
--
--use std::sync::Arc;
--
--use tracing::info;
--
--use super::get_healthy_worker_indices;
--use super::hash_key;
--use super::LoadBalancingPolicy;
--use super::RequestHeaders;
--use crate::core::Worker;
--use crate::metrics::RouterMetrics;
--use crate::policies::ConsistentHashPolicy;
--
--/// Rendezvous hashing (Highest Random Weight) policy
--///
--/// For each request, scores every healthy worker with
--/// `fbi_hash("{hash_key}:{worker_url}")` and picks the one with the
--/// highest score. This is deterministic — the same session always maps
--/// to the same worker — and gives near-perfect balance across workers.
--#[derive(Debug)]
--pub struct RendezvousHashPolicy;
--
--impl RendezvousHashPolicy {
--    pub fn new() -> Self {
--        Self
--    }
--}
--
--impl Default for RendezvousHashPolicy {
--    fn default() -> Self {
--        Self::new()
--    }
--}
--
--impl LoadBalancingPolicy for RendezvousHashPolicy {
--    fn select_worker_with_headers(
--        &self,
--        workers: &[Arc<dyn Worker>],
--        request_text: Option<&str>,
--        headers: Option<&RequestHeaders>,
--    ) -> Option<usize> {
--        let healthy_indices = get_healthy_worker_indices(workers);
--
--        if healthy_indices.is_empty() {
--            return None;
--        }
--
--        let hash_key = hash_key::extract_hash_key(request_text, headers);
--
--        // Score each healthy worker and pick the highest
--        let selected_idx = healthy_indices
--            .iter()
--            .max_by_key(|&&idx| {
--                let score_key = format!("{}:{}", hash_key, workers[idx].url());
--                ConsistentHashPolicy::fbi_hash(&score_key)
--            })
--            .copied()
--            .unwrap();
--
--        let worker_url = workers[selected_idx].url();
--        info!(
--            "Rendezvous hash routing: key='{}' -> worker='{}' (index={})",
--            hash_key, worker_url, selected_idx
--        );
--
--        workers[selected_idx].increment_processed();
--        RouterMetrics::record_processed_request(worker_url);
--        RouterMetrics::record_policy_decision(self.name(), worker_url);
--
--        Some(selected_idx)
--    }
--
--    fn name(&self) -> &'static str {
--        "rendezvous_hash"
--    }
--
--    fn needs_request_text(&self) -> bool {
--        true
--    }
--
--    fn needs_headers(&self) -> bool {
--        true
--    }
--
--    fn as_any(&self) -> &dyn std::any::Any {
--        self
--    }
--}
--
--#[cfg(test)]
--mod tests {
--    use super::*;
--    use crate::core::BasicWorker;
--    use crate::core::WorkerType;
--    use std::collections::HashSet;
--
--    fn make_workers(urls: &[&str]) -> Vec<Arc<dyn Worker>> {
--        urls.iter()
--            .map(|url| {
--                Arc::new(BasicWorker::new(url.to_string(), WorkerType::Regular)) as Arc<dyn Worker>
--            })
--            .collect()
--    }
--
--    #[test]
--    fn test_rendezvous_hash_consistency() {
--        let policy = RendezvousHashPolicy::new();
--        let workers = make_workers(&[
--            "http://worker1:8000",
--            "http://worker2:8000",
--            "http://worker3:8000",
--        ]);
--
--        let request = r#"{"session_id": "consistent_test"}"#;
--        let idx1 = policy.select_worker(&workers, Some(request));
--        let idx2 = policy.select_worker(&workers, Some(request));
--        let idx3 = policy.select_worker(&workers, Some(request));
--
--        assert_eq!(idx1, idx2);
--        assert_eq!(idx2, idx3);
--        assert!(idx1.is_some());
--    }
--
--    #[test]
--    fn test_rendezvous_distribution() {
--        let policy = RendezvousHashPolicy::new();
--        let workers = make_workers(&[
--            "http://worker1:8000",
--            "http://worker2:8000",
--            "http://worker3:8000",
--        ]);
--
--        let mut selected_workers = HashSet::new();
--        for i in 0..100 {
--            let request = format!(r#"{{"session_id": "session_{}"}}"#, i);
--            if let Some(idx) = policy.select_worker(&workers, Some(&request)) {
--                selected_workers.insert(idx);
--            }
--        }
--
--        // All workers should be selected at least once with 100 different sessions
--        assert_eq!(selected_workers.len(), 3);
--    }
--
--    #[test]
--    fn test_rendezvous_with_unhealthy_workers() {
--        let policy = RendezvousHashPolicy::new();
--        let workers = make_workers(&["http://worker1:8000", "http://worker2:8000"]);
--
--        workers[0].set_healthy(false);
--
--        // Should always select the healthy worker
--        for i in 0..10 {
--            let request = format!(r#"{{"session_id": "session_{}"}}"#, i);
--            assert_eq!(policy.select_worker(&workers, Some(&request)), Some(1));
--        }
--    }
--
--    #[test]
--    fn test_rendezvous_no_healthy_workers() {
--        let policy = RendezvousHashPolicy::new();
--        let workers = make_workers(&["http://worker1:8000"]);
--
--        workers[0].set_healthy(false);
--        assert_eq!(policy.select_worker(&workers, None), None);
--    }
--
--    #[test]
--    fn test_rendezvous_minimal_redistribution() {
--        let policy = RendezvousHashPolicy::new();
--        let workers_3 = make_workers(&[
--            "http://worker1:8000",
--            "http://worker2:8000",
--            "http://worker3:8000",
--        ]);
--        let workers_2 = make_workers(&["http://worker1:8000", "http://worker2:8000"]);
--
--        let mut same_count = 0;
--        let total = 100;
--
--        for i in 0..total {
--            let request = format!(r#"{{"session_id": "session_{}"}}"#, i);
--            let idx_3 = policy.select_worker(&workers_3, Some(&request)).unwrap();
--            let idx_2 = policy.select_worker(&workers_2, Some(&request)).unwrap();
--
--            let url_3 = workers_3[idx_3].url();
--            let url_2 = workers_2[idx_2].url();
--            if url_3 != "http://worker3:8000" && url_3 == url_2 {
--                same_count += 1;
--            }
--        }
--
--        let sessions_not_on_worker3 = (0..total)
--            .filter(|i| {
--                let request = format!(r#"{{"session_id": "session_{}"}}"#, i);
--                let idx = policy.select_worker(&workers_3, Some(&request)).unwrap();
--                workers_3[idx].url() != "http://worker3:8000"
--            })
--            .count();
--
--        // All sessions that were on worker1/worker2 should stay there
--        assert_eq!(same_count, sessions_not_on_worker3);
--    }
--
--    #[test]
--    fn test_rendezvous_header_routing() {
--        let policy = RendezvousHashPolicy::new();
--        let workers = make_workers(&[
--            "http://worker1:8000",
--            "http://worker2:8000",
--            "http://worker3:8000",
--        ]);
--
--        let mut headers = RequestHeaders::new();
--        headers.insert("x-session-id".to_string(), "test-session-123".to_string());
--
--        let idx1 = policy.select_worker_with_headers(&workers, None, Some(&headers));
--        let idx2 = policy.select_worker_with_headers(&workers, None, Some(&headers));
--        assert_eq!(idx1, idx2);
--        assert!(idx1.is_some());
--    }
--}
 diff --git a/src/policies/smetric.rs b/src/policies/smetric.rs
 new file mode 100644
 index 0000000..1d5b03e

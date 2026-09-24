@@ -261,6 +261,9 @@ pub enum PolicyConfig {
         virtual_nodes: u32,
     },
 
+    #[serde(rename = "rendezvous_hash")]
+    RendezvousHash,
+
     /// KV-aware routing backed by real-time KV events from vLLM.
     /// Requires `kv_events` to be enabled in the routing mode configuration.
     #[serde(rename = "kv_aware")]
@@ -355,6 +358,7 @@ impl PolicyConfig {
             PolicyConfig::CacheAware { .. } => "cache_aware",
             PolicyConfig::PowerOfTwo { .. } => "power_of_two",
             PolicyConfig::ConsistentHash { .. } => "consistent_hash",
+            PolicyConfig::RendezvousHash => "rendezvous_hash",
             PolicyConfig::KvAware { .. } => "kv_aware",
             PolicyConfig::SMetric(_) => "smetric",
         }

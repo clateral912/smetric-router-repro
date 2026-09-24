@@ -11,10 +11,12 @@ use std::sync::Arc;
 mod cache_aware;
 mod consistent_hash;
 mod factory;
+mod hash_key;
 pub mod kv_aware;
 mod power_of_two;
 mod random;
 mod registry;
+mod rendezvous_hash;
 mod round_robin;
 mod smetric;
 
@@ -25,6 +27,7 @@ pub use kv_aware::{KvAwareConfig, KvAwarePolicy};
 pub use power_of_two::PowerOfTwoPolicy;
 pub use random::RandomPolicy;
 pub use registry::PolicyRegistry;
+pub use rendezvous_hash::RendezvousHashPolicy;
 pub use round_robin::RoundRobinPolicy;
 pub use smetric::{SMetricConfig, SMetricPolicy};
 

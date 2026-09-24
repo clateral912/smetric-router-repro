@@ -8,13 +8,13 @@ The policy is described in [SMetric: Rethink LLM Scheduling for Serving Agents w
 
 ## What is included
 
-- `router/`: self-contained vLLM Router source snapshot. It includes the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the upstream v0.1.15 commit and the source snapshot hash; `router/SOURCE_DIFF.patch` is the exact source delta from that upstream commit.
-- `patches/`: readable patch files corresponding to the Router adaptations. They document the delta from the upstream release even though the runnable artifact uses the pinned source snapshot to avoid patch-order ambiguity.
+- `router/`: self-contained vLLM Router source snapshot measured from the pinned upstream `v0.1.15` commit, with the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the pinned baseline and deterministic source/archive hashes. `router/SOURCE_DIFF.patch` is the exact source delta from that v0.1.15 commit; verify it by applying the patch to that commit and comparing the resulting tree with the snapshot using the recorded exclusions.
+- `patches/`: readable patch files corresponding to the Router adaptations. They document the delta from the pinned release even though the runnable artifact uses the self-contained snapshot to avoid patch-order ambiguity.
 - `python/repro/`: standalone request constructor, prompt reconstruction, session-causal replayer, trace importer, run manifest, and metric recorder. It is self-contained and sends token IDs directly; it does not import the `ssched` repository or a Python scheduler.
 - `configs/`: the 400K-context prefill-only workload and the 110-session PD-mixed workload. The 220-session PD-mixed configuration is included for extension runs.
 - `engine/`: vLLM 0.18.1 patch manifest and runtime notes for LMCache and Mooncake.
 - `scripts/`: trace preparation, Router build, and a matrix driver for repeated arms.
-- `results/`: compact result summaries and comparison metadata; large raw request and router logs are generated locally and are not required in Git.
+- `results/`: compact three-replicate aggregate tables and two matched-policy CDF PNGs; large raw request and router logs are generated locally and are not required in Git. Generated result directories are ignored by default via `results/*/`, while these two small review figures are explicitly tracked.
 
 The Router process and this replayer do not read or start Redis. LMCache and Mooncake are engine-side cache services; routing decisions use only Router lifecycle state, the prefix Tree, and KV Events.
 

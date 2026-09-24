@@ -15,6 +15,7 @@ def policy_from_str(policy_str: Optional[str]) -> PolicyType:
         "cache_aware": PolicyType.CacheAware,
         "power_of_two": PolicyType.PowerOfTwo,
         "consistent_hash": PolicyType.ConsistentHash,
+        "rendezvous_hash": PolicyType.RendezvousHash,
     }
     return policy_map[policy_str]
 

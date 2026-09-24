@@ -22,12 +22,18 @@ import httpx
 from repro.manifest import RunManifest, current_git_commit, sha256_of
 from repro.prom import delta_summary, snapshot
 from repro.process_recorder import ProcessResourceRecorder
-from repro.replayer.prompts import hash_id_to_token_ids
+from repro.replayer.prompts import build_prompt_token_ids, hash_id_to_token_ids
 from repro.replayer.replay import ReplayConfig, replay_trace
 from repro.spec import RunSpec, ensure_nofile
 from repro.trace.loader import group_by_session, load_trace
 
 ROOT = Path(__file__).resolve().parents[1]
+UPSTREAM_ARMS = {
+    "cache_aware",
+    "power_of_two",
+    "consistent_hash",
+    "rendezvous_hash",
+}
 
 
 def write_json(path: Path, value) -> None:
@@ -74,11 +80,102 @@ async def prime_shared_prefixes(spec: RunSpec, run_dir: Path) -> None:
     })
 
 
+async def rr_preroll(spec: RunSpec, run_dir: Path, session_count: int,
+                     settle_s: float) -> None:
+    """Preload complete first-turn prompts with direct RR placement.
+
+    This is deliberately a harness-only phase.  The measured requests still
+    go through the native policy, and no Rust policy or router state is
+    changed by this function.  The router remains alive while the direct
+    requests run so KV Events can populate its live index.
+    """
+    sessions = group_by_session(load_trace(spec.trace))
+    ordered = sorted(
+        ((turns[0].timestamp, sid, turns) for sid, turns in sessions.items()
+         if turns),
+        key=lambda item: (item[0], item[1]),
+    )
+    selected = []
+    for _timestamp, _sid, turns in ordered[:session_count]:
+        root = next((rec for rec in turns if rec.turn == 1), turns[0])
+        selected.append(root)
+    urls = [inst["url"] for inst in spec.backends["instances"]]
+    receipts = []
+
+    async with httpx.AsyncClient(
+        timeout=21600, trust_env=False,
+        limits=httpx.Limits(max_connections=max(8, len(selected))),
+    ) as client:
+        async def warm(index: int, rec) -> None:
+            url = urls[index % len(urls)]
+            payload = {
+                "model": spec.model,
+                "prompt": build_prompt_token_ids(rec),
+                "max_tokens": 1,
+                "min_tokens": 1,
+                "ignore_eos": True,
+                "temperature": 0,
+                "return_token_ids": True,
+                "stream": True,
+                "stream_options": {"include_usage": True},
+            }
+            started = time.time()
+            usage = {}
+            error = None
+            try:
+                async with client.stream(
+                    "POST", f"{url}/v1/completions", json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    async for raw_line in response.aiter_lines():
+                        if not raw_line.startswith("data:"):
+                            continue
+                        data = raw_line[5:].strip()
+                        if data == "[DONE]":
+                            continue
+                        try:
+                            obj = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        if obj.get("usage"):
+                            usage = obj["usage"]
+            except Exception as exc:  # retain all receipts for diagnosis
+                error = repr(exc)[:300]
+            receipts.append({
+                "index": index,
+                "session_id": rec.session_id,
+                "chat_id": rec.chat_id,
+                "turn": rec.turn,
+                "url": url,
+                "input_tokens": rec.input_length,
+                "shared_prefix_hash_id": rec.hash_ids[0]
+                if rec.hash_ids else None,
+                "usage": usage,
+                "error": error,
+                "elapsed_s": time.time() - started,
+            })
+
+        await asyncio.gather(*(warm(index, rec)
+                               for index, rec in enumerate(selected)))
+        if settle_s > 0:
+            await asyncio.sleep(settle_s)
+
+    write_json(run_dir / "rr_preroll.json", {
+        "completed_at_unix": time.time(),
+        "sessions_requested": session_count,
+        "sessions_selected": len(selected),
+        "placement": "round_robin_direct_to_engines",
+        "router_policy_during_preroll": "cache_aware (measured router alive; requests bypassed it)",
+        "kv_event_settle_s": settle_s,
+        "receipts": sorted(receipts, key=lambda item: item["index"]),
+    })
+
+
 def run(args: argparse.Namespace) -> Path:
     ensure_nofile()
     spec = RunSpec.from_yaml(args.config)
     spec.name = f"{spec.name}-vllm-router-native-{args.arm.replace('_', '-') }"
-    spec.policy = "cache_aware" if args.arm == "cache_aware" else "smetric"
+    spec.policy = args.arm if args.arm in UPSTREAM_ARMS else "smetric"
     if spec.backends.get("type") != "external" or spec.mode != "replay":
         raise ValueError("the standalone native runner requires external replay backends")
     run_dir = args.output_root / f"{spec.name}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -127,6 +224,11 @@ def run(args: argparse.Namespace) -> Path:
             "balance_rel_threshold": 1.5, "eviction_interval_secs": 120,
             "max_tree_size": 67108864,
         },
+        "rr_preroll": {
+            "sessions": args.rr_preroll_sessions,
+            "settle_s": args.rr_preroll_settle_s,
+            "placement": "round_robin_direct_to_engines",
+        },
         "smetric_parameters": (
             {"gate": "budget_attention", "drain_window_secs": 300,
              "drain_min_samples": 8, "drain_tps_fallback": 21400,
@@ -142,7 +244,9 @@ def run(args: argparse.Namespace) -> Path:
         instances=spec.backends["instances"],
         scheduler_args={"policy": spec.policy, "arm": args.arm,
                         "python_scheduler": False,
-                        "prefill_only": bool(spec.replay.get("prefill_only", False))},
+                        "prefill_only": bool(spec.replay.get("prefill_only", False)),
+                        "rr_preroll_sessions": args.rr_preroll_sessions,
+                        "rr_preroll_settle_s": args.rr_preroll_settle_s},
     )
     manifest.config = json.loads(json.dumps(manifest.config, default=str))
     manifest.save(run_dir / "manifest.json")
@@ -172,6 +276,11 @@ def run(args: argparse.Namespace) -> Path:
                     raise RuntimeError("router did not register all workers")
                 time.sleep(1)
         asyncio.run(prime_shared_prefixes(spec, run_dir))
+        if args.rr_preroll_sessions > 0:
+            asyncio.run(rr_preroll(
+                spec, run_dir, args.rr_preroll_sessions,
+                args.rr_preroll_settle_s,
+            ))
         resources = ProcessResourceRecorder({"replayer": os.getpid(), "router": proc.pid},
                                             run_dir / "process_resources.jsonl",
                                             period_s=spec.state_record_period_s)
@@ -203,7 +312,18 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--router-binary", type=Path, required=True)
     parser.add_argument("--router-source", type=Path, required=True)
-    parser.add_argument("--arm", required=True, choices=("cache_aware", "smetric_default", "smetric_optimized"))
+    parser.add_argument(
+        "--arm",
+        required=True,
+        choices=(
+            "cache_aware",
+            "power_of_two",
+            "consistent_hash",
+            "rendezvous_hash",
+            "smetric_default",
+            "smetric_optimized",
+        ),
+    )
     parser.add_argument("--output-root", type=Path, default=Path("results"))
     parser.add_argument("--port", type=int, default=18090)
     parser.add_argument("--metrics-port", type=int, default=19090)
@@ -213,4 +333,8 @@ if __name__ == "__main__":
     parser.add_argument("--kv-events-tokenizer", type=Path,
                         default=Path("/mnt/models/Qwen3-Coder-30B-A3B-Instruct/tokenizer.json"))
     parser.add_argument("--kv-events-port-base", type=int, default=5557)
+    parser.add_argument("--rr-preroll-sessions", type=int, default=0,
+                        help="Direct-RR warmup sessions before native replay")
+    parser.add_argument("--rr-preroll-settle-s", type=float, default=10.0,
+                        help="Wait for KV Events after RR warmup")
     run(parser.parse_args())

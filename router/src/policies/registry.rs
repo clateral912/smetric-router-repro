@@ -6,7 +6,7 @@
 /// When the last worker of a model is removed, the policy mapping is cleaned up.
 use super::{
     CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
-    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
+    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy, SMetricPolicy,
 };
 use crate::config::types::PolicyConfig;
 use std::collections::HashMap;
@@ -177,6 +177,7 @@ impl PolicyRegistry {
             "random" => Arc::new(RandomPolicy::new()),
             "cache_aware" => Arc::new(CacheAwarePolicy::new()),
             "power_of_two" => Arc::new(PowerOfTwoPolicy::new()),
+            "rendezvous_hash" => Arc::new(RendezvousHashPolicy::new()),
             "smetric" => Arc::new(SMetricPolicy::new()),
             _ => {
                 warn!("Unknown policy type '{}', using default", policy_type);
@@ -208,6 +209,7 @@ impl PolicyRegistry {
             }
             PolicyConfig::PowerOfTwo { .. } => Arc::new(PowerOfTwoPolicy::new()),
             PolicyConfig::ConsistentHash { .. } => Arc::new(ConsistentHashPolicy::new()),
+            PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
             PolicyConfig::KvAware { .. } => {
                 // KvAwarePolicy requires KVBlockIndex + tokenizer which are only
                 // available in the VllmPrefillDecode router path.  When the

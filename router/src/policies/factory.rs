@@ -2,7 +2,7 @@
 
 use super::{
     CacheAwareConfig, CacheAwarePolicy, ConsistentHashPolicy, LoadBalancingPolicy,
-    PowerOfTwoPolicy, RandomPolicy, RoundRobinPolicy, SMetricPolicy,
+    PowerOfTwoPolicy, RandomPolicy, RendezvousHashPolicy, RoundRobinPolicy, SMetricPolicy,
 };
 use crate::config::PolicyConfig;
 use std::sync::Arc;
@@ -43,6 +43,7 @@ impl PolicyFactory {
                 // The consistent hash policy uses a hardcoded value for now
                 Arc::new(ConsistentHashPolicy::new())
             }
+            PolicyConfig::RendezvousHash => Arc::new(RendezvousHashPolicy::new()),
             PolicyConfig::KvAware { .. } => {
                 // KvAwarePolicy requires KVBlockIndex + tokenizer which are only
                 // available in the VllmPrefillDecode router path.  Use a
@@ -67,6 +68,7 @@ impl PolicyFactory {
             "power_of_two" | "poweroftwo" => Some(Arc::new(PowerOfTwoPolicy::new())),
             "cache_aware" | "cacheaware" => Some(Arc::new(CacheAwarePolicy::new())),
             "consistent_hash" | "consistenthash" => Some(Arc::new(ConsistentHashPolicy::new())),
+            "rendezvous_hash" | "rendezvoushash" => Some(Arc::new(RendezvousHashPolicy::new())),
             // "kv_aware" is not available via name lookup because
             // it requires external dependencies (index, tokenizer).
             "smetric" => Some(Arc::new(SMetricPolicy::new())),

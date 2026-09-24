@@ -30,6 +30,7 @@ pub enum PolicyType {
     CacheAware,
     PowerOfTwo,
     ConsistentHash,
+    RendezvousHash,
     KvAware,
 }
 
@@ -145,6 +146,7 @@ impl Router {
                 PolicyType::ConsistentHash => ConfigPolicyConfig::ConsistentHash {
                     virtual_nodes: 160, // Default value
                 },
+                PolicyType::RendezvousHash => ConfigPolicyConfig::RendezvousHash,
                 PolicyType::KvAware => ConfigPolicyConfig::KvAware {
                     block_size: 16,           // Default value
                     hash_seed: 0,             // Default value
