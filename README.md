@@ -14,7 +14,7 @@ The policy is described in [SMetric: Rethink LLM Scheduling for Serving Agents w
 - `configs/`: the 400K-context prefill-only workload and the 110-session PD-mixed workload. The 220-session PD-mixed configuration is included for extension runs.
 - `engine/`: vLLM 0.18.1 patch manifest and runtime notes for LMCache and Mooncake.
 - `scripts/`: trace preparation, Router build, and a matrix driver for repeated arms.
-- `results/`: compact three-replicate aggregate tables and two matched-policy CDF PNGs; large raw request and router logs are generated locally and are not required in Git. Generated result directories are ignored by default via `results/*/`, while these two small review figures are explicitly tracked.
+- `results/`: compact three-replicate aggregate tables and three matched-request CDF PNGs (prefill-only TTFT, PD-mixed TTFT, and PD-mixed TPOT); large raw request and router logs are generated locally and are not required in Git. Generated result directories are ignored by default via `results/*/`, while these three small review figures are explicitly tracked.
 
 The Router process and this replayer do not read or start Redis. LMCache and Mooncake are engine-side cache services; routing decisions use only Router lifecycle state, the prefix Tree, and KV Events.
 

@@ -269,6 +269,8 @@ def main() -> None:
                  per_policy=True)
     plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_6_policies_all", 900,
                  metric="tpot_s", per_policy=True)
+    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_6_policies_matched", 900,
+                 metric="tpot_s")
 
 
 if __name__ == "__main__":
