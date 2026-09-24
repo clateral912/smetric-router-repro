@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Plot TTFT and TPOT CDFs for the six-policy PO and PD-mixed evaluations.
+"""Plot TTFT and TPOT CDFs for prefill-only and PD-colocation evaluations.
 
 The original figures use the request intersection across policies within each
-replicate. The additional PD-mixed figures use every request offered by each
+replicate. The additional PD-colocation figures use every request offered by each
 policy in the same dispatch window. Failed or missing measurements remain at
 infinity in that policy's denominator.
 """
@@ -36,7 +36,7 @@ SPECS = [
 ]
 SETTINGS = {
     "po": ("Prefill-only", "ttft_cdf_po_6_policies_matched", 600),
-    "pd110": ("PD-mixed", "ttft_cdf_pd110_6_policies_matched", 220),
+    "pd110": ("PD-colocation", "ttft_cdf_pd110_6_policies_matched", 220),
 }
 
 
@@ -53,16 +53,23 @@ def one(base: Path, needle: str) -> Path:
 
 
 
-def runs_for_replicate(setting: str, rep: int) -> dict[str, Path]:
+def runs_for_replicate(
+    setting: str, rep: int, labels: frozenset[str] | None = None
+) -> dict[str, Path]:
     old = OLD_ROOT / setting / f"replicate-{rep}"
     new = NEW_ROOT / setting / f"replicate-{rep}"
+    sources = {
+        "cache_aware (raw)": (old, "cache-aware"),
+        "SMetric(default)": (old, "smetric-default"),
+        "SMetric(optimized)": (old, "smetric-optimized"),
+        "power_of_two": (new, "power-of-two"),
+        "consistent_hash": (new, "consistent-hash"),
+        "rendezvous_hash": (new, "rendezvous-hash"),
+    }
     return {
-        "cache_aware (raw)": one(old, "cache-aware"),
-        "SMetric(default)": one(old, "smetric-default"),
-        "SMetric(optimized)": one(old, "smetric-optimized"),
-        "power_of_two": one(new, "power-of-two"),
-        "consistent_hash": one(new, "consistent-hash"),
-        "rendezvous_hash": one(new, "rendezvous-hash"),
+        label: one(root, needle)
+        for label, (root, needle) in sources.items()
+        if labels is None or label in labels
     }
 
 
@@ -92,10 +99,14 @@ def load(run: Path) -> tuple[float, set[str], dict[str, dict], str]:
     )
 
 
-def plot_setting(setting: str, title: str, filename: str, xmax: int,
-                 metric: str = "ttft_s", per_policy: bool = False) -> None:
-    values: dict[str, list[float]] = {label: [] for label, *_ in SPECS}
-    totals = {label: 0 for label, *_ in SPECS}
+def plot_setting(
+    setting: str, title: str, filename: str, xmax: int,
+    metric: str = "ttft_s", per_policy: bool = False,
+    labels: frozenset[str] | None = None, output_dir: Path = OUT,
+) -> None:
+    specs = [spec for spec in SPECS if labels is None or spec[0] in labels]
+    values: dict[str, list[float]] = {label: [] for label, *_ in specs}
+    totals = {label: 0 for label, *_ in specs}
     replicate_sizes = []
     trace_hashes = set()
     metric_name = "TPOT" if metric == "tpot_s" else "TTFT"
@@ -105,7 +116,7 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
     for rep in (1, 2, 3):
         loaded = {
             label: load(path)
-            for label, path in runs_for_replicate(setting, rep).items()
+            for label, path in runs_for_replicate(setting, rep, labels).items()
         }
         trace_hashes.update(item[3] for item in loaded.values())
         common = None if per_policy else set.intersection(
@@ -138,7 +149,7 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
     # Failures, unfinished requests, and missing measurements retain their
     # probability mass at infinity in each policy's offered denominator.
     series = []
-    for label, color, marker, linestyle, zorder in SPECS:
+    for label, color, marker, linestyle, zorder in specs:
         x = np.sort(np.asarray(values[label], dtype=float))
         y = np.arange(1, len(x) + 1, dtype=float) / totals[label]
         series.append((label, color, marker, linestyle, zorder, x, y))
@@ -202,10 +213,10 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
     by_label = dict(zip(labels, handles))
     # Matplotlib fills legend columns top-to-bottom: arrange the two stars
     # together in the first visible row, followed by the baseline pairs.
-    legend_order = (
+    legend_order = tuple(name for name in (
         "SMetric(default)", "cache_aware (raw)", "consistent_hash",
         "SMetric(optimized)", "power_of_two", "rendezvous_hash",
-    )
+    ) if name in by_label)
     fig.legend(
         [by_label[name] for name in legend_order],
         [f"{name} (n={totals[name]})" if per_policy else name
@@ -239,8 +250,8 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
     ax.yaxis.grid(color="0.6", linestyle=(0, (5, 8)),
                   linewidth=0.35, alpha=0.65, zorder=0)
 
-    OUT.mkdir(parents=True, exist_ok=True)
-    stem = OUT / filename
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stem = output_dir / filename
     for ext in (".png", ".svg", ".pdf"):
         fig.savefig(stem.with_suffix(ext), dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -253,7 +264,7 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
            f"pooled={sum(replicate_sizes)}, "
            f"trace_sha256={next(iter(trace_hashes))}")
     )
-    for label, *_ in SPECS:
+    for label, *_ in specs:
         observed = len(values[label])
         print(
             f"  {label}: observed={observed}/{totals[label]} "
@@ -265,12 +276,17 @@ def plot_setting(setting: str, title: str, filename: str, xmax: int,
 def main() -> None:
     for setting, options in SETTINGS.items():
         plot_setting(setting, *options)
-    plot_setting("pd110", "PD-mixed", "ttft_cdf_pd110_6_policies_all", 220,
+    plot_setting("pd110", "PD-colocation", "ttft_cdf_pd110_6_policies_all", 220,
                  per_policy=True)
-    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_6_policies_all", 900,
+    plot_setting("pd110", "PD-colocation", "tpot_cdf_pd110_6_policies_all", 900,
                  metric="tpot_s", per_policy=True)
-    plot_setting("pd110", "PD-mixed", "tpot_cdf_pd110_6_policies_matched", 900,
+    plot_setting("pd110", "PD-colocation", "tpot_cdf_pd110_6_policies_matched", 900,
                  metric="tpot_s")
+    plot_setting(
+        "pd110", "PD-colocation", "ttft_cdf_pd110", 220, per_policy=True,
+        labels=frozenset({"cache_aware (raw)", "SMetric(default)", "SMetric(optimized)"}),
+        output_dir=OLD_ROOT / "plots",
+    )
 
 
 if __name__ == "__main__":

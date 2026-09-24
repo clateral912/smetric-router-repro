@@ -11,10 +11,10 @@ The policy is described in [SMetric: Rethink LLM Scheduling for Serving Agents w
 - `router/`: self-contained vLLM Router source snapshot measured from the pinned upstream `v0.1.15` commit, with the PR #130-based KV Events integration, native Rust SMetric, the token-ID routing-key adapter, passive placement headers, and the active-load accounting fix used by the benchmark. `router/REPROVENANCE.json` records the pinned baseline and deterministic source/archive hashes. `router/SOURCE_DIFF.patch` is the exact source delta from that v0.1.15 commit; verify it by applying the patch to that commit and comparing the resulting tree with the snapshot using the recorded exclusions.
 - `patches/`: readable patch files corresponding to the Router adaptations. They document the delta from the pinned release even though the runnable artifact uses the self-contained snapshot to avoid patch-order ambiguity.
 - `python/repro/`: standalone request constructor, prompt reconstruction, session-causal replayer, trace importer, run manifest, and metric recorder. It is self-contained and sends token IDs directly; it does not import the `ssched` repository or a Python scheduler.
-- `configs/`: the 400K-context prefill-only workload and the 110-session PD-mixed workload. The 220-session PD-mixed configuration is included for extension runs.
+- `configs/`: the 400K-context prefill-only workload and the 110-session PD-colocation workload. The 220-session PD-colocation configuration is included for extension runs.
 - `engine/`: vLLM 0.18.1 patch manifest and runtime notes for LMCache and Mooncake.
 - `scripts/`: trace preparation, Router build, and a matrix driver for repeated arms.
-- `results/`: compact three-replicate aggregate tables and three matched-request CDF PNGs (prefill-only TTFT, PD-mixed TTFT, and PD-mixed TPOT); large raw request and router logs are generated locally and are not required in Git. Generated result directories are ignored by default via `results/*/`, while these three small review figures are explicitly tracked.
+- `results/`: compact three-replicate aggregate tables, three six-policy matched-request CDF PNGs (prefill-only TTFT, PD-colocation TTFT, and PD-colocation TPOT), and a separate three-policy PD-colocation TTFT offered-cohort CDF. Large raw request and router logs are generated locally and are not required in Git. Generated result directories are ignored by default via `results/*/`; these four small review figures are explicitly tracked.
 
 The Router process and this replayer do not read or start Redis. LMCache and Mooncake are engine-side cache services; routing decisions use only Router lifecycle state, the prefix Tree, and KV Events.
 
@@ -40,7 +40,7 @@ decision, not to this optional optimized hysteresis extension.
 The default matrix has two settings:
 
 - **Prefill-only:** 220 sessions, 400K engine context cap, `max_tokens=1`; the replay keeps recorded preceding assistant replies in the prompt and uses one generated token only as a prefill probe.
-- **PD-mixed:** 110 sessions, 400K engine context cap; each turn requests the trace-recorded output length with EOS ignored, so prefill and decode are both exercised.
+- **PD-colocation:** 110 sessions, 400K engine context cap; each turn requests the trace-recorded output length with EOS ignored, so prefill and decode are both exercised on the same worker.
 
 Arrival order and inter-turn causality are preserved by the closed-loop `thinktime` replayer. The measurement window is the dispatch-offset interval `[1200, 1800)` seconds; completion observation continues through the 2100-second horizon. Each policy is intended to run three independent replicates per setting. Caches and Mooncake are reset before every arm.
 
@@ -72,7 +72,7 @@ For one arm, use `python python/run_router.py --help`. Every run writes a manife
 
 ## Scoring
 
-Use `scripts/summarize_replicates.py` after all replicates finish. Goodput is SLO-qualified prompt-token throughput for prefill-only and SLO-qualified generated-token throughput for PD-mixed. Report medians and replicate spread; do not treat one closed-loop run as a capacity estimate.
+Use `scripts/summarize_replicates.py` after all replicates finish. Goodput is SLO-qualified prompt-token throughput for prefill-only and SLO-qualified generated-token throughput for PD-colocation. Report medians and replicate spread; do not treat one closed-loop run as a capacity estimate.
 
 After the matrix completes, aggregate all three replicates for a setting with:
 

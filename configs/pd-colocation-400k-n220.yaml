@@ -1,6 +1,6 @@
 # Native vLLM Router comparison: each turn decodes exactly the output token
 # count recorded in the trace. EOS is ignored by the shared replayer.
-name: codex-pd-mixed-400k
+name: codex-pd-colocation-400k
 trace: traces/codex/steady_warm1200_measure600_n220_seed42.jsonl
 policy: cache_aware
 seed: 42

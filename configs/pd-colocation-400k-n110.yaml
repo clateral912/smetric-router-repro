@@ -1,5 +1,5 @@
 # Half-load validation: deterministic 110-session subset, same replay shape.
-name: codex-pd-mixed-400k-n110
+name: codex-pd-colocation-400k-n110
 trace: traces/codex/steady_warm1200_measure600_n110_seed42.jsonl
 policy: cache_aware
 seed: 42

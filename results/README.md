@@ -10,15 +10,21 @@ SLO-qualified prompt-token throughput for prefill-only and output-token
 throughput for colocated prefill/decode, in thousands of tokens per second.
 TTFT percentiles are seconds, computed per run before aggregation.
 
-The three matched-request CDFs show prefill-only TTFT, PD-mixed TTFT,
-and PD-mixed TPOT. The main plots show 0–25 s for TTFT and 0–120 ms
+The three matched-request CDFs show prefill-only TTFT, PD-colocation TTFT,
+and PD-colocation TPOT. The main plots show 0–25 s for TTFT and 0–120 ms
 per output token for TPOT, with the full range in an inset; fonts, line
 styles, and markers follow the paper's figures. Each setting pools the
 per-replicate intersection of request IDs offered to all six policies
-(655 prefill-only; 738 PD-mixed). Failed, unobserved, or undefined
+(655 prefill-only; 738 PD-colocation). Failed, unobserved, or undefined
 measurements remain in the common denominator as mass at infinity;
 curves therefore need not reach 1.0. TPOT requires at least two
 generated tokens to be defined.
+
+The supplementary `matrix-20260919-rerun/plots/ttft_cdf_pd110.png`
+compares `cache_aware` (raw), SMetric(default), and SMetric(optimized)
+using each policy's full offered PD-colocation cohort; it does not
+include the separate RR pre-roll run. Its denominators differ by policy,
+so it must not be interpreted as a matched-request comparison.
 
 ### Prefill-only proxy, 220 sessions
 

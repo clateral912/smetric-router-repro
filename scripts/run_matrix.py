@@ -19,7 +19,7 @@ POLICIES = (
 )
 DEFAULT_POLICIES = ("cache_aware", "smetric_default", "smetric_optimized")
 SETTINGS = {"po": ROOT / "configs/prefill-400k.yaml",
-            "pd110": ROOT / "configs/pd-mixed-400k-n110.yaml"}
+            "pd110": ROOT / "configs/pd-colocation-400k-n110.yaml"}
 
 def main() -> None:
     ap = argparse.ArgumentParser()
