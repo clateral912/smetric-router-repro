@@ -107,8 +107,12 @@ remote KV tier has mounted successfully.
 Keep the launcher in the foreground or under your process supervisor. Ctrl-C
 or SIGTERM stops only the process groups created by this launcher. After the
 default 15 s shutdown grace, remaining owned processes are force-stopped;
-LMCache graceful shutdown is not guaranteed. To reset between runs, stop the
-whole stack, wait for `STACK_STOPPED`, and relaunch with a fresh run directory.
+LMCache graceful shutdown is not guaranteed. After process termination, the
+launcher waits up to 90 s for every owned service port to become bindable;
+kernel `TIME_WAIT` can otherwise break the next independent stack. It reports
+`STACK_STOPPED` only after that release barrier. The matrix rejects nonzero
+engine shutdown exits. To reset between runs, wait for `STACK_STOPPED` and
+relaunch with a fresh run directory.
 The Mooncake store is in-memory; this restarts an empty, isolated store without
 deleting an existing server's data or killing unrelated workers.
 

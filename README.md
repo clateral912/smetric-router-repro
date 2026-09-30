@@ -160,6 +160,9 @@ GPUs; no stacks share live KV caches. The output directory must be new.
 The plan records every command, configuration/trace/tokenizer hash, repository
 revision and Router source/binary fingerprint. `completed.jsonl` retains each
 successful run; failure stops the controller without overwriting its artifacts.
+Owned-stack shutdown also waits for service ports to become bindable before
+reporting `STACK_STOPPED`; this prevents a completed run's kernel `TIME_WAIT`
+sockets from breaking the next fresh stack. Unrelated services are never killed.
 
 `report/analysis.json` and `report/summary.csv` preserve all three values,
 arithmetic mean, **sample** standard deviation, minimum and maximum for

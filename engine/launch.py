@@ -4,6 +4,7 @@
 import argparse
 from contextlib import ExitStack
 from datetime import datetime, timezone
+import errno
 import hashlib
 from importlib import metadata
 import json
@@ -166,6 +167,31 @@ def wait_until(check, children, stopping, timeout):
     raise InterruptedError("Startup interrupted")
 
 
+def wait_for_port_release(ports, timeout):
+    """Do not report shutdown while owned service ports are still unbindable."""
+    deadline = time.monotonic() + timeout
+    announced = False
+    while True:
+        blocked = []
+        for port in ports:
+            with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    probe.bind(("127.0.0.1", port))
+                except OSError as error:
+                    if error.errno != errno.EADDRINUSE:
+                        raise
+                    blocked.append(port)
+        if not blocked:
+            return
+        if not announced:
+            print(f"WAITING_FOR_PORT_RELEASE ports={blocked}", flush=True)
+            announced = True
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"Owned stack stopped but service ports remain occupied: {blocked}")
+        time.sleep(0.2)
+
+
 def stop_children(children, grace):
     # Each child has its own session. Never search for or kill unrelated processes.
     for name, process in reversed(children):
@@ -264,6 +290,7 @@ def main():
             print("STARTUP_CANCELLED", flush=True)
         finally:
             stop_children(children, args.shutdown_timeout)
+            wait_for_port_release(ports, timeout=90)
             print("STACK_STOPPED", flush=True)
 
 

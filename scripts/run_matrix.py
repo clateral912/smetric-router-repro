@@ -17,6 +17,8 @@ def stop_engine(process):
     if process.poll() is None:
         process.terminate()
     process.wait(timeout=120)
+    if process.returncode != 0:
+        raise RuntimeError(f"Owned engine stack did not shut down cleanly: exit={process.returncode}")
 
 
 def main():

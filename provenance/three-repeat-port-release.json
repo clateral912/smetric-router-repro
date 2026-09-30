@@ -1,0 +1,28 @@
+{
+  "first_formal_attempt": {
+    "completed_full_runs": 1,
+    "excluded_from_final_fixed_revision_matrix": true,
+    "failure": "Immediate next stack failed with EADDRINUSE after process shutdown"
+  },
+  "fix": "Wait for owned service ports to become bindable before STACK_STOPPED; reject nonzero engine shutdown exits",
+  "routing_and_measurement_behavior_changed": false,
+  "runs": [
+    {
+      "completed_requests": 6,
+      "repeat": 1,
+      "workers": 8,
+      "zero_keys": true
+    },
+    {
+      "completed_requests": 6,
+      "repeat": 2,
+      "workers": 8,
+      "zero_keys": true
+    }
+  ],
+  "scope": "Full eight-worker stack restart verification; short workload, not performance data",
+  "tcp_regression": [
+    "WAITING_FOR_PORT_RELEASE ports=[53645]",
+    "PORT_DRAIN_SMOKE_PASSED 53645 elapsed_s 62.03"
+  ]
+}
