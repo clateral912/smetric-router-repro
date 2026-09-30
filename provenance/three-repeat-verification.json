@@ -1,0 +1,81 @@
+{
+  "dependencies": "197 installed packages compatible; NIXL 1.3.0 torch210 extension imports",
+  "engine_patches": "11 exact patched hashes verified",
+  "horizon_s": 15,
+  "max_model_len": 8192,
+  "measurement_window_s": [
+    0,
+    12
+  ],
+  "model_revision": "b2cff646eb4bb1d68355c01b18ae02e7cf42d120",
+  "regressions": {
+    "duplicate_repeat_rejected": "pass",
+    "independent_scenario_sample_variability": "pass",
+    "missing_repeat_rejected": "pass"
+  },
+  "router_binary_sha256": "5f20b068159b5ba9e9d2ff0783da87e39d0cd17ec61efd5f52ad118f8baf2b82",
+  "router_source_sha256": "cb4c580e036f65e9fc0b05241c83ac5f02a5208e2020bd982fc737ae1a01176a",
+  "runs": [
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 1,
+      "scenario": "po64",
+      "served": 6,
+      "workers": 1
+    },
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 2,
+      "scenario": "po64",
+      "served": 6,
+      "workers": 1
+    },
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 3,
+      "scenario": "po64",
+      "served": 6,
+      "workers": 1
+    },
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 1,
+      "scenario": "pd64",
+      "served": 6,
+      "workers": 1
+    },
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 2,
+      "scenario": "pd64",
+      "served": 6,
+      "workers": 1
+    },
+    {
+      "case": "smetric_initial",
+      "fresh_cache_keys": 0.0,
+      "offered": 6,
+      "passing": 6,
+      "repeat": 3,
+      "scenario": "pd64",
+      "served": 6,
+      "workers": 1
+    }
+  ],
+  "scope": "Real one-GPU controller smoke only, not a full performance measurement"
+}

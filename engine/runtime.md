@@ -16,8 +16,8 @@ NVIDIA GPUs, a compatible CUDA driver, and working RDMA devices/libibverbs:
 
 ```bash
 uv venv --python 3.12 .venv-engine
-uv pip install --python .venv-engine/bin/python -r engine/requirements.txt
-uv pip install --python .venv-engine/bin/python -e .
+uv pip install --python .venv-engine/bin/python --link-mode copy -r engine/requirements.lock
+uv pip install --python .venv-engine/bin/python --no-deps -e .
 .venv-engine/bin/python engine/apply_patches.py
 .venv-engine/bin/python engine/apply_patches.py --check
 ```
@@ -26,8 +26,11 @@ uv pip install --python .venv-engine/bin/python -e .
 `mooncake-transfer-engine==0.3.11.post1`, and `PyYAML==6.0.3`.
 Mooncake's distribution name is `mooncake-transfer-engine`; it supplies both the
 Python client and `mooncake_master`. vLLM 0.18.1 requires PyTorch 2.10.0.
-These are direct-package pins, not a lock of every transitive dependency or the
-host CUDA/RDMA software. Use a dedicated fresh environment. The four versioned
+`requirements.lock` additionally pins all 196 engine/replayer dependencies,
+including NIXL `1.3.0`, with a PyTorch 2.10-compatible EP extension. NIXL `1.5.0`
+was observed to lack `nixl_ep_cpp_torch210` and fail clean engine startup.
+The lock does not install host CUDA/RDMA software. Use a dedicated fresh
+environment and uv's copy link mode so patches cannot alter cached wheels. The four versioned
 patches restore all eleven measured vLLM source files; the installer and launcher
 verify their hashes. The unmodified-wheel compatibility evidence below is
 separate from this patched reproduction runtime.

@@ -15,13 +15,14 @@ starts a distinct experiment; it does not establish a new goodput result.
 |---|---|
 | `router/` | Measured diagnostic source plus PR #130-derived ZMQ events and a common live-cache prefix index |
 | `scripts/build_router.sh` | Locked release build and source/binary fingerprint |
-| `scripts/prepare_trace.py` | Public dataset import and deterministic PO64/PD64 trace preparation |
+| `scripts/prepare_trace.py` | Public dataset import and deterministic PO127/PO64/PD64 trace preparation |
 | `scripts/run_router.py` | One native Router arm, closed-loop replay, manifests and decision logs |
 | `scripts/run_matrix.py` | Six-policy controller; fresh isolated Mooncake/engine stack before each arm |
+| `scripts/run_repeated_matrix.py` | All three workloads, all five SMetric configs and four baselines, three independent repeats each |
 | `scripts/score_results.py` | Actual offered-cohort scoring, mean/percentile TTFT and TPOT, and request-level CSV |
 | `python/repro/` | Trace import, synthetic prompt reconstruction, causal replay and metrics |
-| `configs/po64.yaml`, `configs/pd64.yaml` | Current 64-session workload configurations |
-| `configs/smetric/` | Fixed-rate default, initial optimized, PO `SLACK=0.5` and PD `SLACK=0.15` configurations |
+| `configs/po127.yaml`, `configs/po64.yaml`, `configs/pd64.yaml` | Original high-load PO, captured half-load PO and colocation workloads |
+| `configs/smetric/` | Fixed-rate default, learned initial, `SLACK=0.5`, `SLACK=0.15` and retained `SLACK=0.25` configurations |
 | `engine/` | Exact package pins, all four measured vLLM patches, verified patch installer and foreground launcher |
 | `provenance/` | Public trace checksums and captured PO traffic mapping |
 | `assets/benchmarks/` | Historical measurement bundles, figures, renderers and path-redacted diagnostic provenance |
@@ -42,8 +43,8 @@ Run from the repository root:
 
 ```bash
 uv venv --python 3.12 .venv-engine
-uv pip install --python .venv-engine/bin/python -r engine/requirements.txt
-uv pip install --python .venv-engine/bin/python -e .
+uv pip install --python .venv-engine/bin/python --link-mode copy -r engine/requirements.lock
+uv pip install --python .venv-engine/bin/python --no-deps -e .
 .venv-engine/bin/python engine/apply_patches.py
 .venv-engine/bin/python engine/apply_patches.py --check
 PYTHON=.venv-engine/bin/python bash scripts/build_router.sh
@@ -60,9 +61,20 @@ The build produces `router/target/release/vllm-router` and
 source fingerprint before running. If `CARGO_TARGET_DIR` is overridden, pass
 `--router-binary /that/target/release/vllm-router` to the runner/controller.
 
+`engine/requirements.lock` pins all 196 engine/replayer dependencies, including
+NIXL `1.3.0`, whose EP wheel supports the required PyTorch `2.10.0`. An
+unconstrained clean installation selected NIXL `1.5.0` and failed because its
+wheel lacked `nixl_ep_cpp_torch210`; do not replace the lock with just the four
+direct pins. `--link-mode copy` keeps patching isolated from uv's wheel cache.
+Host CUDA/RDMA software is recorded, not installed by this Python lock.
+
 ## Prepare the exact workloads
 
-Point `MODEL` at your local Qwen3-Coder-30B-A3B-Instruct weights directory:
+Point `MODEL` at your local Qwen3-Coder-30B-A3B-Instruct weights directory.
+The verified public revision is
+[`b2cff646`](https://huggingface.co/Qwen/Qwen3-Coder-30B-A3B-Instruct/tree/b2cff646eb4bb1d68355c01b18ae02e7cf42d120);
+`provenance/model-lock.json` contains SHA256 hashes for all 16 weight shards
+and the inference/tokenizer files.
 
 ```bash
 export MODEL=/absolute/path/to/Qwen3-Coder-30B-A3B-Instruct
@@ -72,10 +84,16 @@ export MODEL_TOKENIZER="$MODEL/tokenizer.json"
 
 This downloads `Inferact/codex_swebenchpro_traces/codex_swebenchpro.json`, checks
 the source/tokenizer hashes, reconstructs the original 220/110-session source
-traces, and writes `traces/po64.jsonl`, `traces/pd64.jsonl` and a trace lock.
+traces, and writes `traces/po127.jsonl`, `traces/po64.jsonl`, `traces/pd64.jsonl`
+and a trace lock.
 `--source /path/to/codex_swebenchpro.json` reuses a local public dataset;
 `--base-po` and `--base-pd` can reuse the checksum-verified generated sources.
 
+- **PO127:** original high-load `thinktime` workload. Retains the complete
+  conversations of the 127 source sessions with first arrival before 1200 s,
+  from the original 220-session source. Original timestamps and think times
+  are unchanged. Removing sessions that cannot enter before the horizon also
+  preserves the shared-prefix priming set.
 - **PO64:** same captured dispatch timestamps and whole-session thinning as the
   published half-load experiment. The reconstructed JSONL must match the
   published SHA256 exactly. Causal `tracets` replay preserves the conversation
@@ -86,7 +104,7 @@ traces, and writes `traces/po64.jsonl`, `traces/pd64.jsonl` and a trace lock.
   sessions but only these 64 could enter by the horizon; this explicit subset is
   a different trace artifact, not a retroactive change to archived provenance.
 
-Both configurations use warmup `[0,300)`, measurement `[300,900)` and a 1200 s
+All three configurations use warmup `[0,300)`, measurement `[300,900)` and a 1200 s
 completion horizon. PD means prefill/decode **colocation**, not disaggregation.
 
 ## Start engines or run the full matrix
@@ -117,6 +135,43 @@ for the PR #130 integration. Text prompts are the default and retain the
 measured character-based SMetric coefficients. `--prompt-mode token_ids` is
 supported with KV Events; SMetric then uses token counts, so its coefficients
 and rate units must be calibrated separately.
+
+### Complete three-repeat experiment
+
+```bash
+.venv-engine/bin/python scripts/run_repeated_matrix.py \
+  --model "$MODEL" --tokenizer "$MODEL_TOKENIZER" \
+  --output-root results/po-colocation-three-repeat-001
+```
+
+The default matrix is **PO127, PO64 and PD64 × nine cases × three repeats =
+81 full runs**. The nine cases are `smetric_default`, `smetric_initial`,
+`smetric_po_tuned`, `smetric_pd_tuned`, `smetric_pd_slack025`, `cache_aware`,
+`power_of_two`, `consistent_hash` and `rendezvous_hash`. Every SMetric YAML is
+run in every workload; cross-tuned rows are deliberate coverage, not a claim
+that a PO-tuned gate is the selected PD configuration.
+
+Each individual repeat invokes this repository's matrix controller and gets
+a fresh owned Mooncake master, fresh workers, zero-key readiness, shared-prefix
+priming and a fresh repository-built Router. Runs are sequential on all eight
+GPUs; no stacks share live KV caches. The output directory must be new.
+`--scenarios po127 po64` or `--scenarios pd64` selects a phase;
+`--cases ...` selects cases and `--repeats 3` is the default.
+The plan records every command, configuration/trace/tokenizer hash, repository
+revision and Router source/binary fingerprint. `completed.jsonl` retains each
+successful run; failure stops the controller without overwriting its artifacts.
+
+`report/analysis.json` and `report/summary.csv` preserve all three values,
+arithmetic mean, **sample** standard deviation, minimum and maximum for
+goodput, SLO pass rate and TTFT/TPOT statistics. Missing PO TPOT stays missing.
+Requests are not pooled across repeats, and an incomplete/duplicated repeat set
+cannot be reported as complete.
+
+`provenance/three-repeat-preparation.json` records the measured environment.
+`provenance/three-repeat-verification.json` records six real single-GPU smoke
+runs (PO and colocation, three each), with fresh zero-key caches and 36 completed
+requests. Those short smoke runs are not full performance measurements.
+
 
 The common event index supplies confirmed GPU-resident prefixes to both
 `cache_aware` and SMetric; hash/load-only baselines keep their original selectors.

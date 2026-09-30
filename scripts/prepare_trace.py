@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconstruct PO64 captured timestamps and PD64 arrivals from the public traces."""
+"""Reconstruct captured PO64 and eligible original PO127/PD64 public traces."""
 import argparse
 import hashlib
 import json
@@ -63,17 +63,26 @@ def main():
     po.write_text(''.join(json.dumps(row, separators=(',', ':')) + '\n' for row in captured))
     if digest(po) != plan['trace_sha256']:
         raise ValueError('Reconstructed PO trace does not match the measured trace')
-    pd_source = load(bases['pd'])
-    first = {}
-    for row in pd_source:
-        first[row['session_id']] = min(first.get(row['session_id'], float('inf')), row['timestamp'])
-    origin = min(first.values())
-    admitted = {sid for sid, timestamp in first.items() if timestamp - origin < 1200}
-    if len(admitted) != 64:
-        raise ValueError('PD source does not admit exactly64 sessions by the horizon')
-    pd = output / 'pd64.jsonl'
-    pd.write_text(''.join(json.dumps(row) + '\n' for row in pd_source if row['session_id'] in admitted))
-    records = {'source_dataset_sha256': lock['source_sha256'], 'tokenizer_sha256': digest(args.tokenizer), 'po': {'trace_sha256': digest(po), 'configured_sessions': 64, 'dispatch_mode': 'tracets', 'captured_trace_identical_to_published': True}, 'pd': {'trace_sha256': digest(pd), 'configured_sessions': 64, 'dispatch_mode': 'thinktime', 'derivation': 'Whole sessions with original first arrival before1200s; later source sessions cannot dispatch before the historical horizon'}}
+    records = {'source_dataset_sha256': lock['source_sha256'],
+               'tokenizer_sha256': digest(args.tokenizer),
+               'po': {'trace_sha256': digest(po), 'configured_sessions': 64,
+                      'dispatch_mode': 'tracets', 'captured_trace_identical_to_published': True}}
+    for setting, count in (('po', 127), ('pd', 64)):
+        source = load(bases[setting])
+        first = {}
+        for row in source:
+            first[row['session_id']] = min(first.get(row['session_id'], float('inf')), row['timestamp'])
+        origin = min(first.values())
+        admitted = {sid for sid, timestamp in first.items() if timestamp - origin < 1200}
+        if len(admitted) != count:
+            raise ValueError(f'{setting.upper()} source does not admit exactly {count} sessions by the horizon')
+        trace = output / f'{setting}{count}.jsonl'
+        trace.write_text(''.join(json.dumps(row) + '\n' for row in source if row['session_id'] in admitted))
+        label = 'po127' if setting == 'po' else 'pd'
+        records[label] = {'trace_sha256': digest(trace), 'configured_sessions': count,
+                          'source_configured_sessions': 220 if setting == 'po' else 110,
+                          'dispatch_mode': 'thinktime',
+                          'derivation': 'Whole sessions with original first arrival before 1200s; original timestamps and think times unchanged'}
     (output / 'trace-lock.json').write_text(json.dumps(records, indent=2) + '\n')
     print(json.dumps(records, indent=2))
 

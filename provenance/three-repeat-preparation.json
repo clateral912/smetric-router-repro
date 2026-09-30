@@ -1,0 +1,97 @@
+{
+  "cloned_base_revision": "a65bd28e690c14121e63151ef6aaf9488d7a1aaf",
+  "environment": {
+    "dedicated_environment": true,
+    "dependency_check": "197 installed packages compatible",
+    "engine_patched_files": 11,
+    "full_dependency_lock": "engine/requirements.lock",
+    "locked_packages_excluding_editable_repro": 196,
+    "nixl": "1.3.0",
+    "nixl_abi_fix": "Fresh unconstrained installation resolved NIXL 1.5.0, whose cu12 wheel lacks the torch210 EP module; published NIXL 1.3.0 matches the measured dependency and imports successfully",
+    "pythonpath_override": null
+  },
+  "historical_results": "Not reused as new measurements; archived datasets and plots remain unchanged",
+  "host": {
+    "cpu_count": 192,
+    "cpu_model": "INTEL(R) XEON(R) PLATINUM 8558P",
+    "gpu_count": 8,
+    "gpu_memory_mib_each": 143771,
+    "gpu_model": "NVIDIA H20-3e",
+    "host_memory": "2.0 TiB",
+    "numa_nodes": 2,
+    "nvidia_driver": "550.144.03",
+    "os_kernel": "Linux 5.15.0-94-generic x86_64"
+  },
+  "matrix": {
+    "baseline_strategies": [
+      "cache_aware",
+      "power_of_two",
+      "consistent_hash",
+      "rendezvous_hash"
+    ],
+    "full_runs": 81,
+    "horizon_s": 1200,
+    "kv_events": false,
+    "measurement_window_s": [
+      300,
+      900
+    ],
+    "prompt_mode": "text",
+    "repeats_per_combination": 3,
+    "scenarios": [
+      "po127",
+      "po64",
+      "pd64"
+    ],
+    "smetric_configurations": [
+      "default.yaml",
+      "optimized-initial.yaml",
+      "optimized-po.yaml",
+      "optimized-pd.yaml",
+      "optimized-pd-slack025.yaml"
+    ],
+    "warmup_s": 300,
+    "workers": 8
+  },
+  "model_lock": "provenance/model-lock.json",
+  "repository": "https://github.com/clateral912/smetric-router-repro",
+  "router_binary_sha256": "5f20b068159b5ba9e9d2ff0783da87e39d0cd17ec61efd5f52ad118f8baf2b82",
+  "router_build": "scripts/build_router.sh; cargo release --locked from the fresh reproduction checkout; no borrowed executable",
+  "router_source_sha256": "cb4c580e036f65e9fc0b05241c83ac5f02a5208e2020bd982fc737ae1a01176a",
+  "toolchain": {
+    "cargo": "1.97.0 (c980f4866 2026-06-30)",
+    "python": "3.12.3",
+    "rustc": "1.97.0 (2d8144b78 2026-07-07)",
+    "uv": "0.11.25"
+  },
+  "workload_preparation": {
+    "po_actual_eligible_sessions": 127,
+    "po_original_configured_sessions": 220,
+    "po_shared_prefix_priming_identical_after_removing_unadmittable_sessions": true,
+    "shared_prefix_count": 1,
+    "trace_lock": {
+      "pd": {
+        "configured_sessions": 64,
+        "derivation": "Whole sessions with original first arrival before 1200s; original timestamps and think times unchanged",
+        "dispatch_mode": "thinktime",
+        "source_configured_sessions": 110,
+        "trace_sha256": "319cbd94504e1d69853416d470b44c4359e231c47cdf3cf344dc5cb6809c9b1b"
+      },
+      "po": {
+        "captured_trace_identical_to_published": true,
+        "configured_sessions": 64,
+        "dispatch_mode": "tracets",
+        "trace_sha256": "a5c0fd08620e0104760b3296a82c8630ee1599844821b096382c14bd6d607175"
+      },
+      "po127": {
+        "configured_sessions": 127,
+        "derivation": "Whole sessions with original first arrival before 1200s; original timestamps and think times unchanged",
+        "dispatch_mode": "thinktime",
+        "source_configured_sessions": 220,
+        "trace_sha256": "cb3aec6df2a8a2ba1e1636bb6a1c05ea62c1fd0ae2d7e7994002ed72ea6f6bb8"
+      },
+      "source_dataset_sha256": "670f1ae8325fd70aac6ae6bdf4b03bbbd740d6ac8f2b49d8a02daaee3193fbc3",
+      "tokenizer_sha256": "19564a48c4f71a2a1b937cce34c737a1e662b171c5f5d7edf641a15cd896f07d"
+    }
+  }
+}

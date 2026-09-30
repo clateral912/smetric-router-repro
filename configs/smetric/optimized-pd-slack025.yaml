@@ -1,0 +1,9 @@
+# Retained PD tuning candidate; only the internal routing SLACK differs.
+# External scoring SLO, trace timing, and engine settings stay unchanged.
+C_LIN: 1.0
+C_ATT: 0.0001
+SLACK: 0.25
+HIT_RATIO: 0.1
+TTFT_SLO_BASE: 0.2
+TTFT_SLO_PER_CHAR: 0.0001
+MAX_TREE_SIZE: 67108864
