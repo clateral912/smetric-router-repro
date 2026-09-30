@@ -167,21 +167,25 @@ standalone reproduction repository.
 |---|---|
 | Measured Router base | [`689a9afd`](https://github.com/clateral912/router/commit/689a9afd490d892a5d82ff344c951ba9e184dd00) |
 | Measured diagnostic Router | [`8319dd64`](https://github.com/clateral912/router/commit/8319dd64a8ac28bcb2d96c1d53595a6891c67425) |
-| Squashed policy submitted in [Router PR #330](https://github.com/vllm-project/router/pull/330) | [`3801ed13`](https://github.com/vllm-project/router/commit/3801ed137f4a118c40a6c4782e9026c8f5db194d) |
+| Current policy submitted in [Router PR #330](https://github.com/vllm-project/router/pull/330) | [`d7ee8e87`](https://github.com/clateral912/router/commit/d7ee8e8757cf84e26cca808e3bfae2793faa9d66) |
+| Original signed squashed policy, before compatibility/tracking review fixes | [`3801ed13`](https://github.com/clateral912/router/commit/3801ed137f4a118c40a6c4782e9026c8f5db194d) |
 | Original published repro snapshot | [`99521022`](https://github.com/clateral912/smetric-router-repro/commit/995210222bc8cfc3afd0a52f091b8c94c3de9922) |
 
 The Router tag `archive/smetric-diagnostic-8319dd64` retains the original
 diagnostic commit; its diff from the measured base is byte-identical to all four
 archived `router-source.patch` files. The tag
 `archive/smetric-pre-squash-20260930` preserves the original five-commit policy
-history. The squashed policy has the same Git tree as that archived branch tip.
+history. The original signed squashed policy (`3801ed13`) has the same Git tree as that archived branch tip; the current PR revision adds compatibility and request-tracking fixes.
 These tags preserve provenance; they do not change the measured revisions or
 establish a new benchmark result. Existing figure and result permalinks remain
 pinned to the original repro snapshot.
 
 The preceding unsigned squashed revision is retained by the Router tag
 `archive/smetric-pre-signoff-0690e3a7`; its tree is identical to the signed
-policy above.
+original signed policy (`3801ed13`) above.
+The tag `archive/smetric-pre-review-3801ed13` preserves that signed revision
+before the current review fixes. The current PR and bundled diagnostic runtime
+are distinct revisions; neither changes the archived measurement inputs or results.
 
 To retrieve the exact historical diagnostic source:
 
@@ -190,6 +194,18 @@ git clone --no-checkout https://github.com/clateral912/router.git router-histori
 git -C router-historical fetch origin refs/tags/archive/smetric-diagnostic-8319dd64
 git -C router-historical checkout --detach 8319dd64a8ac28bcb2d96c1d53595a6891c67425
 ```
+
+
+### Historical Power-of-Two baseline limitation
+
+The archived Power-of-Two arm was measured without complete request-lifecycle
+load feedback; its request-path load counters could remain zero. Those results
+are a historical **zero-load/load-feedback-limited baseline**, not evidence for
+a fully load-aware Power-of-Two implementation. The current SMetric PR fixes
+SMetric fallback accounting only. It does not change the Power-of-Two selector
+or load-snapshot semantics, and it does not revise or remeasure the archived
+figures. A corrected Power-of-Two baseline requires a separate change and a new,
+explicitly versioned measurement.
 
 ## Integration verification
 
