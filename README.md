@@ -167,7 +167,7 @@ standalone reproduction repository.
 |---|---|
 | Measured Router base | [`689a9afd`](https://github.com/clateral912/router/commit/689a9afd490d892a5d82ff344c951ba9e184dd00) |
 | Measured diagnostic Router | [`8319dd64`](https://github.com/clateral912/router/commit/8319dd64a8ac28bcb2d96c1d53595a6891c67425) |
-| Squashed policy submitted in [Router PR #330](https://github.com/vllm-project/router/pull/330) | [`0690e3a7`](https://github.com/vllm-project/router/commit/0690e3a71376cd0558994293299f25888980ec81) |
+| Squashed policy submitted in [Router PR #330](https://github.com/vllm-project/router/pull/330) | [`3801ed13`](https://github.com/vllm-project/router/commit/3801ed137f4a118c40a6c4782e9026c8f5db194d) |
 | Original published repro snapshot | [`99521022`](https://github.com/clateral912/smetric-router-repro/commit/995210222bc8cfc3afd0a52f091b8c94c3de9922) |
 
 The Router tag `archive/smetric-diagnostic-8319dd64` retains the original
@@ -178,6 +178,10 @@ history. The squashed policy has the same Git tree as that archived branch tip.
 These tags preserve provenance; they do not change the measured revisions or
 establish a new benchmark result. Existing figure and result permalinks remain
 pinned to the original repro snapshot.
+
+The preceding unsigned squashed revision is retained by the Router tag
+`archive/smetric-pre-signoff-0690e3a7`; its tree is identical to the signed
+policy above.
 
 To retrieve the exact historical diagnostic source:
 
