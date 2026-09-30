@@ -1,0 +1,9 @@
+# Fair Tree-only comparison: capacity aligned to cache_aware (67,108,864 chars).
+# Other values match the fixed-rate arm; omission estimates each worker's rate.
+C_LIN: 1.0
+C_ATT: 0.0001
+SLACK: 1.0
+HIT_RATIO: 0.1
+TTFT_SLO_BASE: 0.2
+TTFT_SLO_PER_CHAR: 0.0001
+MAX_TREE_SIZE: 67108864

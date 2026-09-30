@@ -1,0 +1,104 @@
+{
+  "scope": "Single-run parameter search; same historical patched engine, baseline workload and external SLO. Not a stability or holdout claim.",
+  "selected_config": "<WORKSPACE_ROOT>/ssched-runtime/tune-pd110-w300/configs/slack-015.yaml",
+  "rows": [
+    {
+      "configuration": "default",
+      "goodput_ktok_s": 0.6188016666666667,
+      "passing_pct": 86.06896551724138,
+      "ttft_s": {
+        "p50": 1.0052498541772366,
+        "p90": 3.7657707579433923,
+        "p95": 5.339178831130264,
+        "p99": 11.636133901327842
+      },
+      "tpot_ms": {
+        "p50": 14.08539398500089,
+        "p90": 30.708755204652366,
+        "p95": 38.41480399836946,
+        "p99": 52.75204952248384
+      },
+      "offered": 725,
+      "served": 725
+    },
+    {
+      "configuration": "optimized_SLACK_1",
+      "goodput_ktok_s": 0.5730883333333333,
+      "passing_pct": 85.4077253218884,
+      "ttft_s": {
+        "p50": 1.0127603225409985,
+        "p90": 4.126256103813648,
+        "p95": 6.727708240598441,
+        "p99": 19.544826383516188
+      },
+      "tpot_ms": {
+        "p50": 14.028601523866687,
+        "p90": 34.18898127070197,
+        "p95": 40.72216412260083,
+        "p99": 51.839044388483536
+      },
+      "offered": 699,
+      "served": 699
+    },
+    {
+      "configuration": "optimized_SLACK_025",
+      "goodput_ktok_s": 0.5658733333333333,
+      "passing_pct": 84.61538461538461,
+      "ttft_s": {
+        "p50": 1.133963504806161,
+        "p90": 3.7111265938729048,
+        "p95": 5.215553988702595,
+        "p99": 10.973436133936048
+      },
+      "tpot_ms": {
+        "p50": 13.847201054926263,
+        "p90": 31.288903032744855,
+        "p95": 38.30798138019641,
+        "p99": 54.20136624237611
+      },
+      "offered": 676,
+      "served": 676
+    },
+    {
+      "configuration": "optimized_SLACK_015",
+      "goodput_ktok_s": 0.678055,
+      "passing_pct": 89.90318118948824,
+      "ttft_s": {
+        "p50": 1.0552057139575481,
+        "p90": 3.9395643405616276,
+        "p95": 5.264589235186573,
+        "p99": 8.89885457426309
+      },
+      "tpot_ms": {
+        "p50": 14.050229918211699,
+        "p90": 26.875521379464004,
+        "p95": 30.88472301301735,
+        "p99": 43.406143097525366
+      },
+      "offered": 723,
+      "served": 723
+    }
+  ],
+  "matched_default_vs_selected": {
+    "default": {
+      "matched_offered": 703,
+      "served": 703,
+      "passing": 609,
+      "qualifying_output_tokens": 365728
+    },
+    "optimized_slack_015": {
+      "matched_offered": 703,
+      "served": 703,
+      "passing": 632,
+      "qualifying_output_tokens": 396328
+    }
+  },
+  "selected_routing_reasons": {
+    "home_meets": 646,
+    "home_rejected": 12,
+    "low_hit": 33,
+    "first_turn": 32
+  },
+  "published_pr_results_unchanged": false,
+  "publication": "Published optimized PD row and both PD CDFs select SLACK=0.15; PO and other five PD arms unchanged."
+}

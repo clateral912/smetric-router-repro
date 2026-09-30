@@ -1,0 +1,9 @@
+# Tighten the internal routing gate; external scoring SLO is unchanged.
+# All remaining values match the original optimized learned-rate policy.
+C_LIN: 1.0
+C_ATT: 0.0001
+SLACK: 0.15
+HIT_RATIO: 0.1
+TTFT_SLO_BASE: 0.2
+TTFT_SLO_PER_CHAR: 0.0001
+MAX_TREE_SIZE: 67108864

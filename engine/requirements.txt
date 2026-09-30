@@ -1,0 +1,4 @@
+vllm==0.18.1
+lmcache==0.4.4
+mooncake-transfer-engine==0.3.11.post1
+PyYAML==6.0.3

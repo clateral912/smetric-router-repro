@@ -1,0 +1,10 @@
+{
+  "local_hostname": "127.0.0.1",
+  "metadata_server": "P2PHANDSHAKE",
+  "protocol": "rdma",
+  "device_name": "mlx5_105",
+  "master_server_address": "127.0.0.1:50051",
+  "global_segment_size": 68719476736,
+  "local_buffer_size": 2147483648,
+  "transfer_timeout": 30
+}

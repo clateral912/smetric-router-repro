@@ -1,0 +1,12 @@
+{
+  "trace_first_timestamp": -1200.0,
+  "trace_first_arrival_offset_range": [
+    0.0,
+    2067.1875
+  ],
+  "configured_sessions": 110,
+  "scheduled_by_horizon": 64,
+  "actual_admitted": 64,
+  "expected_equals_actual": true,
+  "explanation": "Replay offsets are timestamp minus earliest first-turn timestamp (-1200); testing raw timestamp < 1200 would be incorrect."
+}

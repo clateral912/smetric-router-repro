@@ -1,0 +1,9 @@
+# Optimized PD tuning candidate: change only internal routing SLACK.
+# Evaluation SLO, trace timing, engine settings, and measured window are unchanged.
+C_LIN: 1.0
+C_ATT: 0.0001
+SLACK: 0.25
+HIT_RATIO: 0.1
+TTFT_SLO_BASE: 0.2
+TTFT_SLO_PER_CHAR: 0.0001
+MAX_TREE_SIZE: 67108864

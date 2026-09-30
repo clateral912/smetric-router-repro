@@ -1,0 +1,62 @@
+{
+  "candidate": "slack-015",
+  "changed_parameters": {
+    "SLACK": {
+      "old": 1.0,
+      "new": 0.15
+    }
+  },
+  "baseline_summary": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/six_policy_analysis.json",
+  "router_revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+  "router_binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "workload_sha256": "cb4c68cb52dcc925d9c3412a1771a7cd71d4ab5dfdcae414952db1895ada4bb1",
+  "candidate_config_sha256": "1ccac619dc5ce3d24c3a353551dfbd1a98a7bf43c3d8df44c919b9241f881302",
+  "engine_files_sha256": {
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": "0ce6f740bec83b6fa9753666783b22d0adfe24348cf2e529dee71fb3bbe49376",
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_utils.py": "2fe6bd0fd75ad6c2a057e0b9ae2a28b853ee6522ef4733ffa487d944741cbd5b",
+    "entrypoints/openai/chat_completion/serving.py": "6a1c39522a8248e761efac41fd126a3ff057bfcc5a5490a696c88d258eaa14ef",
+    "entrypoints/openai/completion/serving.py": "82653d0c10a6baf1b959773a6109e1b16516d36b49d294ef51301cc3cf26bd84",
+    "entrypoints/openai/engine/protocol.py": "c13ba2471eb3ed1d87875b7a5af9f1a2a39ba459b066c9cbec9c8a90f45f83e0",
+    "outputs.py": "07bce159dec4406ba71ac5fcfda37c24e9ed01239da6f1ddc394064e7096d8a2",
+    "v1/core/sched/scheduler.py": "3cc8e7d64c2c863e1f95cdcc2aa6bcee82db19e064a2557c9e16564a864ba307",
+    "v1/metrics/stats.py": "367a2ca71c6affc9dc553fc5727c0ad82b4f4e842f7c0eaedeef3507f151267c",
+    "v1/request.py": "0135e66ef432e10100ed5ddb4cdef14d203a392de10bae55fa0f1229e395c212"
+  },
+  "warmup_s": 300,
+  "measurement_window_s": [
+    300,
+    900
+  ],
+  "horizon_s": 1200,
+  "evaluation_slo": "latency_s <= 1 + recorded_input_length / 16000 + actual_output_tokens * 0.020",
+  "goal_default_goodput_ktok_s": 0.6188016666666667,
+  "scope": "Same historical patched engine for a matched tuning comparison; not a native-vLLM benchmark. 110 configured trace sessions, 64 scheduled by horizon.",
+  "path": "<WORKSPACE_ROOT>/ssched-runtime/tune-pd110-w300/results/slack-015/decision-probe-pd110-w300-vllm-router-native-smetric-optimized_20260929_181004",
+  "offered": 723,
+  "served": 723,
+  "passing": 650,
+  "passing_pct": 89.90318118948824,
+  "goodput_ktok_s": 0.678055,
+  "ttft_s": {
+    "p50": 1.0552057139575481,
+    "p90": 3.9395643405616276,
+    "p95": 5.264589235186573,
+    "p99": 8.89885457426309
+  },
+  "tpot_ms": {
+    "p50": 14.050229918211699,
+    "p90": 26.875521379464004,
+    "p95": 30.88472301301735,
+    "p99": 43.406143097525366
+  },
+  "admitted_sessions": 64,
+  "relative_to_default_pct": 9.575496726199283,
+  "relative_to_untuned_optimized_pct": 18.315966415881203,
+  "beats_default_this_run": true,
+  "diagnostic_coverage": {
+    "SMETRIC_DECISION_JSON": 1334,
+    "SMETRIC_RATE_JSON": 1334,
+    "ROUTING_DECISION_JSON": 1334
+  },
+  "limitation": "One selected tuning run versus historical single-run baselines; not proof of a stable improvement or an independent holdout result."
+}

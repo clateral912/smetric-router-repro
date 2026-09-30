@@ -1,0 +1,174 @@
+{
+  "scope": "Integration checks on real Qwen3-Coder workers; not a new eight-worker performance matrix.",
+  "cargo_library_tests": {
+    "passed": 653
+  },
+  "affected_routing_contract_tests": {
+    "passed": 29,
+    "suites": [
+      "test_prompt_input",
+      "test_pd_routing",
+      "test_dp_routing"
+    ]
+  },
+  "all_rust_test_targets_compiled": true,
+  "engine_patches": {
+    "installed_from_pristine_wheel": true,
+    "verified_source_files": 11,
+    "patches": 4,
+    "historical_manifest_corrections": [
+      "Add both v1/engine accounting files",
+      "Restore missing conditional engine-state publisher hunks in scheduler patch"
+    ]
+  },
+  "public_source_trace_regeneration": {
+    "source_dataset_sha256": "670f1ae8325fd70aac6ae6bdf4b03bbbd740d6ac8f2b49d8a02daaee3193fbc3",
+    "tokenizer_sha256": "19564a48c4f71a2a1b937cce34c737a1e662b171c5f5d7edf641a15cd896f07d",
+    "po": {
+      "trace_sha256": "a5c0fd08620e0104760b3296a82c8630ee1599844821b096382c14bd6d607175",
+      "configured_sessions": 64,
+      "dispatch_mode": "tracets",
+      "captured_trace_identical_to_published": true
+    },
+    "pd": {
+      "trace_sha256": "319cbd94504e1d69853416d470b44c4359e231c47cdf3cf344dc5cb6809c9b1b",
+      "configured_sessions": 64,
+      "dispatch_mode": "thinktime",
+      "derivation": "Whole sessions with original first arrival before1200s; later source sessions cannot dispatch before the historical horizon"
+    }
+  },
+  "real_event_cases": [
+    {
+      "case": "cache_aware-text",
+      "cold_worker": "http://127.0.0.1:18281",
+      "independently_warmed_worker": "http://127.0.0.1:18280",
+      "hot_worker": "http://127.0.0.1:18280",
+      "event_prefix_hit": null,
+      "real_clear_event_observed": true,
+      "after_clear_worker": "http://127.0.0.1:18281",
+      "all_http_requests_successful": true
+    },
+    {
+      "case": "cache_aware-token_ids",
+      "cold_worker": "http://127.0.0.1:18281",
+      "independently_warmed_worker": "http://127.0.0.1:18280",
+      "hot_worker": "http://127.0.0.1:18280",
+      "event_prefix_hit": null,
+      "real_clear_event_observed": true,
+      "after_clear_worker": "http://127.0.0.1:18281",
+      "all_http_requests_successful": true
+    },
+    {
+      "case": "smetric-text",
+      "cold_worker": "http://127.0.0.1:18281",
+      "independently_warmed_worker": "http://127.0.0.1:18280",
+      "hot_worker": "http://127.0.0.1:18280",
+      "event_prefix_hit": 2823,
+      "real_clear_event_observed": true,
+      "after_clear_worker": "http://127.0.0.1:18281",
+      "all_http_requests_successful": true
+    },
+    {
+      "case": "smetric-token_ids",
+      "cold_worker": "http://127.0.0.1:18280",
+      "independently_warmed_worker": "http://127.0.0.1:18281",
+      "hot_worker": "http://127.0.0.1:18281",
+      "event_prefix_hit": 1088,
+      "real_clear_event_observed": true,
+      "after_clear_worker": "http://127.0.0.1:18280",
+      "all_http_requests_successful": true
+    }
+  ],
+  "standalone_policy_replays": [
+    {
+      "mode": "po",
+      "arm": "smetric_default",
+      "kv_events": false,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-smetric_default-tree/integration-smoke-po-vllm-router-native-smetric-default_20260930_125545"
+    },
+    {
+      "mode": "po",
+      "arm": "smetric_optimized",
+      "kv_events": false,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-smetric_optimized-tree/integration-smoke-po-vllm-router-native-smetric-optimized_20260930_125551"
+    },
+    {
+      "mode": "po",
+      "arm": "cache_aware",
+      "kv_events": true,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-cache_aware-events/integration-smoke-po-vllm-router-native-cache-aware_20260930_125557"
+    },
+    {
+      "mode": "po",
+      "arm": "power_of_two",
+      "kv_events": false,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-power_of_two-tree/integration-smoke-po-vllm-router-native-power-of-two_20260930_125605"
+    },
+    {
+      "mode": "po",
+      "arm": "consistent_hash",
+      "kv_events": false,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-consistent_hash-tree/integration-smoke-po-vllm-router-native-consistent-hash_20260930_125611"
+    },
+    {
+      "mode": "po",
+      "arm": "rendezvous_hash",
+      "kv_events": false,
+      "served": 3,
+      "passing": 3,
+      "evidence_key": "replays/po-rendezvous_hash-tree/integration-smoke-po-vllm-router-native-rendezvous-hash_20260930_125617"
+    }
+  ],
+  "pd_replay": {
+    "requests": 3,
+    "requested_and_generated_tokens_per_request": 8,
+    "served": 3,
+    "passing": 3
+  },
+  "controller_matrix": {
+    "completed": true,
+    "arms": {
+      "smetric_optimized": {
+        "workers": 1,
+        "stored_keys_at_readiness": 0.0,
+        "patched_source_files": 11
+      },
+      "cache_aware": {
+        "workers": 1,
+        "stored_keys_at_readiness": 0.0,
+        "patched_source_files": 11
+      }
+    },
+    "requests_per_arm": 3,
+    "separate_engine_stacks": true
+  },
+  "historical_assets": {
+    "files": 68,
+    "unchanged_files": 62,
+    "path_redacted_files": 6,
+    "measurements_changed": false
+  },
+  "live_smoke_binary_sha256": "e8dbf3c466ea6425f2ae82283dfefd58df1bbb771d2ab5cf23a50bd0f561e95c",
+  "post_live_smoke_rust_edits": "CLI help names both policies; first-event log label is policy-neutral. No selector/index/replay behavior changed.",
+  "smoke_accelerators_released": true,
+  "fresh_standalone_python_installation": {
+    "installed": true,
+    "public_trace_regeneration_matches_measured_environment": true
+  },
+  "release_build": {
+    "locked": true,
+    "source_sha256": "cb4c580e036f65e9fc0b05241c83ac5f02a5208e2020bd982fc737ae1a01176a",
+    "binary_sha256": "69f911c5b620b57ec4d6d8180f5b77f8f80980282eea78f1fd9bcb02e3a62195",
+    "updated_cli_help_exercised": true
+  }
+}

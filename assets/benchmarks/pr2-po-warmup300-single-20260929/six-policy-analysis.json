@@ -1,0 +1,446 @@
+{
+  "scope": "Six policies once each, PO, diagnostic Router; original trace arrival schedule unchanged",
+  "warmup_s": 300,
+  "measurement_window_s": [
+    300,
+    900
+  ],
+  "horizon_s": 1200,
+  "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+  "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "arms": {
+    "smetric_default": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/smetric_default/decision-probe-w300-vllm-router-native-smetric-default_20260929_121312",
+      "offered": 1594,
+      "served": 1594,
+      "passing": 1063,
+      "goodput_ktok_s": 128.67400333333333,
+      "passing_pct": 66.68757841907151,
+      "ttft_s": {
+        "p50": 3.232578506693244,
+        "p90": 10.98445797264576,
+        "p95": 16.008917287178335,
+        "p99": 30.25788447260848
+      },
+      "local_cache_pct": 94.1092595916307,
+      "external_cache_pct": 0.06067279766069398,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 90,
+      "continuations_with_prior_route": 1531,
+      "worker_switches": 0,
+      "worker_switch_pct": 0.0,
+      "switch_group": {
+        "served": 0,
+        "pass": 0,
+        "ttft_p50": null,
+        "local_cache_pct": null
+      },
+      "retained_group": {
+        "served": 1531,
+        "pass": 1038,
+        "ttft_p50": 3.291717868298292,
+        "local_cache_pct": 94.8214639042061
+      },
+      "decision_reasons": {
+        "home_meets": 460,
+        "first_turn": 63,
+        "none_meets_stick": 1071
+      },
+      "reason_performance": {
+        "home_meets": {
+          "offered": 460,
+          "served": 460,
+          "passing": 446,
+          "input_tokens": 36556205,
+          "local_cache_tokens": 36104256
+        },
+        "first_turn": {
+          "offered": 63,
+          "served": 63,
+          "passing": 25,
+          "input_tokens": 854308,
+          "local_cache_tokens": 33264
+        },
+        "none_meets_stick": {
+          "offered": 1071,
+          "served": 1071,
+          "passing": 592,
+          "input_tokens": 71659783,
+          "local_cache_tokens": 66507728
+        }
+      },
+      "selected_away_from_best_prefix": 37,
+      "selected_idle": 833,
+      "selected_fails_gate_despite_feasible_candidate": 0,
+      "selected_rate_quantiles": {
+        "p10": 10000.0,
+        "p50": 10000.0,
+        "p90": 10000.0
+      },
+      "missing_candidate_rates": 0,
+      "logged_decisions_validated": 2872,
+      "logged_rate_responses": 2866,
+      "worker_requests": {
+        "http://127.0.0.1:8005": 227,
+        "http://127.0.0.1:8000": 186,
+        "http://127.0.0.1:8004": 242,
+        "http://127.0.0.1:8007": 152,
+        "http://127.0.0.1:8001": 181,
+        "http://127.0.0.1:8002": 191,
+        "http://127.0.0.1:8003": 224,
+        "http://127.0.0.1:8006": 191
+      },
+      "additional_routing_attempts_all_replay": 0
+    },
+    "smetric_optimized": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/smetric_optimized/decision-probe-w300-vllm-router-native-smetric-optimized_20260929_123647",
+      "offered": 1620,
+      "served": 1620,
+      "passing": 1093,
+      "goodput_ktok_s": 132.85867166666668,
+      "passing_pct": 67.46913580246914,
+      "ttft_s": {
+        "p50": 3.3288584798574448,
+        "p90": 9.23139113932848,
+        "p95": 12.688676570914682,
+        "p99": 22.05077160850167
+      },
+      "local_cache_pct": 93.73031542061447,
+      "external_cache_pct": 0.6807678869271351,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 90,
+      "continuations_with_prior_route": 1557,
+      "worker_switches": 23,
+      "worker_switch_pct": 1.477199743095697,
+      "switch_group": {
+        "served": 23,
+        "pass": 13,
+        "ttft_p50": 2.674230020493269,
+        "local_cache_pct": 3.3525796237660646
+      },
+      "retained_group": {
+        "served": 1534,
+        "pass": 1058,
+        "ttft_p50": 3.4137495327740908,
+        "local_cache_pct": 95.19872173421211
+      },
+      "decision_reasons": {
+        "home_meets": 1534,
+        "first_turn": 63,
+        "home_rejected": 23
+      },
+      "reason_performance": {
+        "home_meets": {
+          "offered": 1534,
+          "served": 1534,
+          "passing": 1058,
+          "input_tokens": 109104070,
+          "local_cache_tokens": 103865680
+        },
+        "first_turn": {
+          "offered": 63,
+          "served": 63,
+          "passing": 22,
+          "input_tokens": 854308,
+          "local_cache_tokens": 33264
+        },
+        "home_rejected": {
+          "offered": 23,
+          "served": 23,
+          "passing": 13,
+          "input_tokens": 923468,
+          "local_cache_tokens": 30960
+        }
+      },
+      "selected_away_from_best_prefix": 59,
+      "selected_idle": 866,
+      "selected_fails_gate_despite_feasible_candidate": 2,
+      "selected_rate_quantiles": {
+        "p10": 247266.3311704906,
+        "p50": 287515.2293633528,
+        "p90": 328568.57631411124
+      },
+      "missing_candidate_rates": 0,
+      "logged_decisions_validated": 2908,
+      "logged_rate_responses": 2890,
+      "worker_requests": {
+        "http://127.0.0.1:8002": 173,
+        "http://127.0.0.1:8006": 164,
+        "http://127.0.0.1:8004": 245,
+        "http://127.0.0.1:8001": 245,
+        "http://127.0.0.1:8003": 159,
+        "http://127.0.0.1:8007": 252,
+        "http://127.0.0.1:8005": 199,
+        "http://127.0.0.1:8000": 183
+      },
+      "additional_routing_attempts_all_replay": 0
+    },
+    "rendezvous_hash": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/rendezvous_hash/decision-probe-w300-vllm-router-native-rendezvous-hash_20260929_130033",
+      "offered": 1582,
+      "served": 1582,
+      "passing": 1019,
+      "goodput_ktok_s": 125.059305,
+      "passing_pct": 64.41213653603035,
+      "ttft_s": {
+        "p50": 3.4380871392786503,
+        "p90": 11.449018177762628,
+        "p95": 17.56839907709501,
+        "p99": 26.93323110327127
+      },
+      "local_cache_pct": 94.26410453960393,
+      "external_cache_pct": 0.031379063892656635,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 91,
+      "continuations_with_prior_route": 1519,
+      "worker_switches": 0,
+      "worker_switch_pct": 0.0,
+      "switch_group": {
+        "served": 0,
+        "pass": 0,
+        "ttft_p50": null,
+        "local_cache_pct": null
+      },
+      "retained_group": {
+        "served": 1519,
+        "pass": 1004,
+        "ttft_p50": 3.4813546538352966,
+        "local_cache_pct": 94.98675105872515
+      },
+      "decision_reasons": {},
+      "reason_performance": {
+        "rendezvous_hash": {
+          "offered": 1582,
+          "served": 1582,
+          "passing": 1019,
+          "input_tokens": 107689637,
+          "local_cache_tokens": 101512672
+        }
+      },
+      "selected_away_from_best_prefix": null,
+      "selected_idle": null,
+      "selected_fails_gate_despite_feasible_candidate": null,
+      "selected_rate_quantiles": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "missing_candidate_rates": null,
+      "logged_decisions_validated": 0,
+      "logged_rate_responses": 0,
+      "worker_requests": {
+        "http://127.0.0.1:8003": 200,
+        "http://127.0.0.1:8005": 183,
+        "http://127.0.0.1:8006": 111,
+        "http://127.0.0.1:8002": 136,
+        "http://127.0.0.1:8001": 280,
+        "http://127.0.0.1:8000": 203,
+        "http://127.0.0.1:8007": 246,
+        "http://127.0.0.1:8004": 223
+      },
+      "additional_routing_attempts_all_replay": 1
+    },
+    "cache_aware": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/cache_aware/decision-probe-w300-vllm-router-native-cache-aware_20260929_133900",
+      "offered": 1552,
+      "served": 1552,
+      "passing": 954,
+      "goodput_ktok_s": 116.21610666666666,
+      "passing_pct": 61.46907216494845,
+      "ttft_s": {
+        "p50": 3.7818732894957066,
+        "p90": 13.480120567232373,
+        "p95": 20.507941656187175,
+        "p99": 44.20828101869673
+      },
+      "local_cache_pct": 92.5430879304821,
+      "external_cache_pct": 0.7065559954699812,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 93,
+      "continuations_with_prior_route": 1489,
+      "worker_switches": 1,
+      "worker_switch_pct": 0.0671591672263264,
+      "switch_group": {
+        "served": 1,
+        "pass": 0,
+        "ttft_p50": 20.284597724676132,
+        "local_cache_pct": 0.6817477533312675
+      },
+      "retained_group": {
+        "served": 1488,
+        "pass": 927,
+        "ttft_p50": 3.877038585022092,
+        "local_cache_pct": 93.33641798099342
+      },
+      "decision_reasons": {},
+      "reason_performance": {
+        "cache_aware": {
+          "offered": 1552,
+          "served": 1552,
+          "passing": 954,
+          "input_tokens": 105362916,
+          "local_cache_tokens": 97506096
+        }
+      },
+      "selected_away_from_best_prefix": null,
+      "selected_idle": null,
+      "selected_fails_gate_despite_feasible_candidate": null,
+      "selected_rate_quantiles": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "missing_candidate_rates": null,
+      "logged_decisions_validated": 0,
+      "logged_rate_responses": 0,
+      "worker_requests": {
+        "http://127.0.0.1:8007": 230,
+        "http://127.0.0.1:8006": 306,
+        "http://127.0.0.1:8002": 303,
+        "http://127.0.0.1:8001": 244,
+        "http://127.0.0.1:8003": 217,
+        "http://127.0.0.1:8004": 194,
+        "http://127.0.0.1:8005": 56,
+        "http://127.0.0.1:8000": 2
+      },
+      "additional_routing_attempts_all_replay": 0
+    },
+    "power_of_two": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/power_of_two/decision-probe-w300-vllm-router-native-power-of-two_20260929_140239",
+      "offered": 1286,
+      "served": 1249,
+      "passing": 724,
+      "goodput_ktok_s": 79.19689833333334,
+      "passing_pct": 56.29860031104199,
+      "ttft_s": {
+        "p50": 3.862209513783455,
+        "p90": 16.915765985101476,
+        "p95": 29.508494064211835,
+        "p99": 138.49258375123128
+      },
+      "local_cache_pct": 23.418306177648002,
+      "external_cache_pct": 67.69270088468382,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 92,
+      "continuations_with_prior_route": 1223,
+      "worker_switches": 1075,
+      "worker_switch_pct": 87.89860997547015,
+      "switch_group": {
+        "served": 1041,
+        "pass": 597,
+        "ttft_p50": 4.149011366069317,
+        "local_cache_pct": 15.637656998343965
+      },
+      "retained_group": {
+        "served": 147,
+        "pass": 104,
+        "ttft_p50": 2.8337471708655357,
+        "local_cache_pct": 83.07730871532067
+      },
+      "decision_reasons": {},
+      "reason_performance": {
+        "power_of_two": {
+          "offered": 1286,
+          "served": 1249,
+          "passing": 724,
+          "input_tokens": 79663490,
+          "local_cache_tokens": 18655840
+        }
+      },
+      "selected_away_from_best_prefix": null,
+      "selected_idle": null,
+      "selected_fails_gate_despite_feasible_candidate": null,
+      "selected_rate_quantiles": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "missing_candidate_rates": null,
+      "logged_decisions_validated": 0,
+      "logged_rate_responses": 0,
+      "worker_requests": {
+        "http://127.0.0.1:8005": 161,
+        "http://127.0.0.1:8003": 181,
+        "http://127.0.0.1:8001": 150,
+        "http://127.0.0.1:8006": 165,
+        "http://127.0.0.1:8004": 151,
+        "http://127.0.0.1:8007": 165,
+        "http://127.0.0.1:8002": 139,
+        "http://127.0.0.1:8000": 174
+      },
+      "additional_routing_attempts_all_replay": 0
+    },
+    "consistent_hash": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/results/consistent_hash/decision-probe-w300-vllm-router-native-consistent-hash_20260929_142619",
+      "offered": 1553,
+      "served": 1553,
+      "passing": 1022,
+      "goodput_ktok_s": 124.87546666666667,
+      "passing_pct": 65.80811332904057,
+      "ttft_s": {
+        "p50": 3.197292100638151,
+        "p90": 11.351456797122955,
+        "p95": 17.41896489709615,
+        "p99": 62.56533421412143
+      },
+      "local_cache_pct": 93.36745154917557,
+      "external_cache_pct": 0.1261564339781329,
+      "admitted_sessions_by_horizon": 127,
+      "cohort_sessions": 93,
+      "continuations_with_prior_route": 1490,
+      "worker_switches": 0,
+      "worker_switch_pct": 0.0,
+      "switch_group": {
+        "served": 0,
+        "pass": 0,
+        "ttft_p50": null,
+        "local_cache_pct": null
+      },
+      "retained_group": {
+        "served": 1490,
+        "pass": 1001,
+        "ttft_p50": 3.2035187631845474,
+        "local_cache_pct": 94.09678859941285
+      },
+      "decision_reasons": {},
+      "reason_performance": {
+        "consistent_hash": {
+          "offered": 1553,
+          "served": 1553,
+          "passing": 1022,
+          "input_tokens": 105659296,
+          "local_cache_tokens": 98651392
+        }
+      },
+      "selected_away_from_best_prefix": null,
+      "selected_idle": null,
+      "selected_fails_gate_despite_feasible_candidate": null,
+      "selected_rate_quantiles": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "missing_candidate_rates": null,
+      "logged_decisions_validated": 0,
+      "logged_rate_responses": 0,
+      "worker_requests": {
+        "http://127.0.0.1:8003": 186,
+        "http://127.0.0.1:8004": 165,
+        "http://127.0.0.1:8005": 164,
+        "http://127.0.0.1:8006": 236,
+        "http://127.0.0.1:8000": 294,
+        "http://127.0.0.1:8007": 146,
+        "http://127.0.0.1:8001": 208,
+        "http://127.0.0.1:8002": 154
+      },
+      "additional_routing_attempts_all_replay": 0
+    }
+  },
+  "trace_sha256": "bf867df2b85118091da9e3658039321b59b99cbe858276732fd33343c331e6b8",
+  "limitations": [
+    "One run per policy; no standard deviation or stable-ranking claim.",
+    "Not directly comparable with the previous [1200,1800) measurement window.",
+    "Instrumented diagnostic child, not the exact unmodified PR2 binary.",
+    "Same trace arrivals imply only a subset of the configured220 sessions enters before the1200s cutoff."
+  ]
+}

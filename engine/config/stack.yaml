@@ -1,0 +1,29 @@
+model: Qwen/Qwen3-Coder-30B-A3B-Instruct
+served_model_name: Qwen3-30B-A3B
+http_host: 127.0.0.1
+worker_port_base: 8000
+kv_events_port_base: 5557
+internal_port_base: 28000
+master_rpc_port: 50151
+master_metrics_port: 19004
+max_model_len: 400000
+max_num_batched_tokens: 8192
+gpu_memory_utilization: 0.9
+workers:
+- gpu: '0'
+  rdma_device: mlx5_105
+- gpu: '1'
+  rdma_device: mlx5_83
+- gpu: '2'
+  rdma_device: mlx5_9
+- gpu: '3'
+  rdma_device: mlx5_24
+- gpu: '4'
+  rdma_device: mlx5_119
+- gpu: '5'
+  rdma_device: mlx5_88
+- gpu: '6'
+  rdma_device: mlx5_75
+- gpu: '7'
+  rdma_device: mlx5_44
+kv_block_size: 16

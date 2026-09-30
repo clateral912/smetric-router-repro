@@ -1,0 +1,245 @@
+{
+  "scope": "PD-colocation, 110 configured sessions, six policies once each; original arrival offsets unchanged",
+  "measurement_window_s": [
+    300,
+    900
+  ],
+  "horizon_s": 1200,
+  "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+  "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "trace_sha256": "027fe40c913d7b8c39a269524ad1894e6cba3334f727d09ece5ac8ca50b24b2f",
+  "goodput_token_type": "actual generated output tokens",
+  "evaluation_slo": "latency_s <= 1 + recorded_input_length / 16000 + actual_output_tokens * 0.020",
+  "arms": {
+    "smetric_default": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/smetric_default/decision-probe-pd110-w300-vllm-router-native-smetric-default_20260929_150554",
+      "offered": 725,
+      "served": 725,
+      "passing": 624,
+      "passing_pct": 86.06896551724138,
+      "goodput_ktok_s": 0.6188016666666667,
+      "ttft_s": {
+        "p50": 1.0052498541772366,
+        "p90": 3.7657707579433923,
+        "p95": 5.339178831130264,
+        "p99": 11.636133901327842
+      },
+      "tpot_ms": {
+        "p50": 14.08539398500089,
+        "p90": 30.708755204652366,
+        "p95": 38.41480399836946,
+        "p99": 52.75204952248384
+      },
+      "latency_s": {
+        "p50": 5.3745870888233185,
+        "p90": 27.709715330600766,
+        "p95": 58.94215488359329,
+        "p99": 127.5769189755617
+      },
+      "completed_output_tokens": 476600,
+      "qualifying_output_tokens": 371281,
+      "local_cache_pct": 94.28952745646652,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {},
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 1334,
+        "SMETRIC_RATE_JSON": 1323,
+        "ROUTING_DECISION_JSON": 1334
+      }
+    },
+    "smetric_optimized": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/smetric_optimized/decision-probe-pd110-w300-vllm-router-native-smetric-optimized_20260929_152943",
+      "offered": 699,
+      "served": 699,
+      "passing": 597,
+      "passing_pct": 85.4077253218884,
+      "goodput_ktok_s": 0.5730883333333333,
+      "ttft_s": {
+        "p50": 1.0127603225409985,
+        "p90": 4.126256103813648,
+        "p95": 6.727708240598441,
+        "p99": 19.544826383516188
+      },
+      "tpot_ms": {
+        "p50": 14.028601523866687,
+        "p90": 34.18898127070197,
+        "p95": 40.72216412260083,
+        "p99": 51.839044388483536
+      },
+      "latency_s": {
+        "p50": 5.495223309844732,
+        "p90": 30.457721039652935,
+        "p95": 62.13878204263747,
+        "p99": 143.0353443098811
+      },
+      "completed_output_tokens": 463796,
+      "qualifying_output_tokens": 343853,
+      "local_cache_pct": 94.0547458020106,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {},
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 1320,
+        "SMETRIC_RATE_JSON": 1316,
+        "ROUTING_DECISION_JSON": 1320
+      }
+    },
+    "rendezvous_hash": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/rendezvous_hash/decision-probe-pd110-w300-vllm-router-native-rendezvous-hash_20260929_155338",
+      "offered": 681,
+      "served": 681,
+      "passing": 535,
+      "passing_pct": 78.56093979441997,
+      "goodput_ktok_s": 0.5185266666666667,
+      "ttft_s": {
+        "p50": 1.0323897190392017,
+        "p90": 4.073853332549334,
+        "p95": 6.224414072930813,
+        "p99": 14.31692353039981
+      },
+      "tpot_ms": {
+        "p50": 16.155679700086296,
+        "p90": 34.38137417696683,
+        "p95": 40.110731403688966,
+        "p99": 59.957845483608885
+      },
+      "latency_s": {
+        "p50": 6.321308687329292,
+        "p90": 31.783802215009928,
+        "p95": 54.85545512661338,
+        "p99": 151.3741426654162
+      },
+      "completed_output_tokens": 446436,
+      "qualifying_output_tokens": 311116,
+      "local_cache_pct": 94.80139977995599,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {},
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 0,
+        "SMETRIC_RATE_JSON": 0,
+        "ROUTING_DECISION_JSON": 1280
+      }
+    },
+    "cache_aware": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/cache_aware/decision-probe-pd110-w300-vllm-router-native-cache-aware_20260929_161732",
+      "offered": 659,
+      "served": 658,
+      "passing": 511,
+      "passing_pct": 77.54172989377845,
+      "goodput_ktok_s": 0.5020533333333334,
+      "ttft_s": {
+        "p50": 1.1160373128950596,
+        "p90": 3.586291935667395,
+        "p95": 5.360559498518702,
+        "p99": 12.34023522268977
+      },
+      "tpot_ms": {
+        "p50": 16.766845383445308,
+        "p90": 40.51297087006137,
+        "p95": 51.33326304359116,
+        "p99": 81.92689374454964
+      },
+      "latency_s": {
+        "p50": 6.250890530645847,
+        "p90": 35.002648908644915,
+        "p95": 63.443381955660755,
+        "p99": 133.79032709483013
+      },
+      "completed_output_tokens": 445395,
+      "qualifying_output_tokens": 301232,
+      "local_cache_pct": 93.67228696524215,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {
+        "replay_cancelled": 1
+      },
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 0,
+        "SMETRIC_RATE_JSON": 0,
+        "ROUTING_DECISION_JSON": 1290
+      }
+    },
+    "power_of_two": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/power_of_two/decision-probe-pd110-w300-vllm-router-native-power-of-two_20260929_164126",
+      "offered": 591,
+      "served": 590,
+      "passing": 383,
+      "passing_pct": 64.80541455160744,
+      "goodput_ktok_s": 0.3225883333333333,
+      "ttft_s": {
+        "p50": 1.4615977685898542,
+        "p90": 4.977029164135456,
+        "p95": 7.571898105554267,
+        "p99": 15.037738037854439
+      },
+      "tpot_ms": {
+        "p50": 17.82521899848431,
+        "p90": 56.56120984390488,
+        "p95": 71.11116662972256,
+        "p99": 92.44443688595096
+      },
+      "latency_s": {
+        "p50": 7.790986094623804,
+        "p90": 41.399823376163845,
+        "p95": 84.39912400245638,
+        "p99": 286.25880036328016
+      },
+      "completed_output_tokens": 397971,
+      "qualifying_output_tokens": 193553,
+      "local_cache_pct": 43.76659673874465,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {
+        "replay_cancelled": 1
+      },
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 0,
+        "SMETRIC_RATE_JSON": 0,
+        "ROUTING_DECISION_JSON": 1102
+      }
+    },
+    "consistent_hash": {
+      "path": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-pd110-w300/results/consistent_hash/decision-probe-pd110-w300-vllm-router-native-consistent-hash_20260929_170524",
+      "offered": 660,
+      "served": 659,
+      "passing": 516,
+      "passing_pct": 78.18181818181819,
+      "goodput_ktok_s": 0.44901833333333335,
+      "ttft_s": {
+        "p50": 1.0400529354810715,
+        "p90": 3.6273521795868873,
+        "p95": 6.340920935943725,
+        "p99": 11.948864850252857
+      },
+      "tpot_ms": {
+        "p50": 14.779698710595623,
+        "p90": 48.10651488254441,
+        "p95": 53.46207405755674,
+        "p99": 69.71975652900615
+      },
+      "latency_s": {
+        "p50": 5.542900875210762,
+        "p90": 29.903633020818265,
+        "p95": 66.57651151642204,
+        "p99": 210.86396747976423
+      },
+      "completed_output_tokens": 414052,
+      "qualifying_output_tokens": 269411,
+      "local_cache_pct": 94.30083284462788,
+      "admitted_sessions_by_horizon": 64,
+      "offered_errors": {
+        "replay_cancelled": 1
+      },
+      "diagnostic_coverage": {
+        "SMETRIC_DECISION_JSON": 0,
+        "SMETRIC_RATE_JSON": 0,
+        "ROUTING_DECISION_JSON": 1152
+      }
+    }
+  },
+  "common_offered_request_count": 530,
+  "limitations": [
+    "One run per policy, no standard deviation or stable-ranking claim.",
+    "300s warmup, not the earlier 1200s-warmup experiment.",
+    "PD output-token goodput must not be compared numerically with PO input-token goodput.",
+    "Instrumented diagnostic child of PR2, not its unmodified head binary.",
+    "110 sessions are configured in the trace, but observed admitted-session counts by the 1200s horizon are [64]; this is not a fully admitted 110-session load."
+  ]
+}

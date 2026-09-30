@@ -1,0 +1,30 @@
+{
+  "policies": [
+    "smetric_default",
+    "smetric_optimized",
+    "rendezvous_hash",
+    "cache_aware",
+    "power_of_two",
+    "consistent_hash"
+  ],
+  "fresh_runs": true,
+  "warmup_s": 300,
+  "measurement_window_s": [
+    300,
+    900
+  ],
+  "horizon_s": 1200,
+  "configured_sessions": 64,
+  "trace_sha256": "a5c0fd08620e0104760b3296a82c8630ee1599844821b096382c14bd6d607175",
+  "primary_metric": "SLO-qualified full-input goodput ktok/s on actual offered cohort",
+  "secondary_fixed_cohort": "Same820 requests scheduled in [300,900); missing/failed/unfinished requests do not pass. Used to rule out boundary/cohort artifacts.",
+  "slo": "latency_s <= 1 + effective_input_length / 16000",
+  "tuning": "Only optimized parameters; preserve online-rate mode, default configuration, trace, engine, horizon and scoring. Keep every trial.",
+  "limits": "One run per baseline policy; tuning on this workload must be labeled selected, not held-out validation.",
+  "engine_launcher": "<WORKSPACE_ROOT>/ssched-runtime/po-halfload64-six/engine/launch.py",
+  "startup_fix": "Distinct VLLM_PORT ranges28000+100*worker avoid concurrent internal TCPStore port allocation collisions; no workload or inference parameters changed.",
+  "engine_python": "<WORKSPACE_ROOT>/ssched/engine/.venv/bin/python",
+  "router_binary": "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+  "router_binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "engine_config_sha256": "6a0e1e880b558968d5bf3b4866d04b20c4a66dcd7beee5d243183c3a1032ca36"
+}

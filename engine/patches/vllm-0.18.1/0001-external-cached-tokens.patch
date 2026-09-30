@@ -1,0 +1,159 @@
+--- a/vllm/outputs.py
++++ b/vllm/outputs.py
+@@ -119,6 +119,7 @@
+         encoder_prompt: str | None = None,
+         encoder_prompt_token_ids: list[int] | None = None,
+         num_cached_tokens: int | None = None,
++        num_external_cached_tokens: int | None = None,
+         *,
+         kv_transfer_params: dict[str, Any] | None = None,
+         # Forward compatibility, code that uses args added in new release can
+@@ -140,6 +141,8 @@
+         self.encoder_prompt = encoder_prompt
+         self.encoder_prompt_token_ids = encoder_prompt_token_ids
+         self.num_cached_tokens = num_cached_tokens
++        # External (store/L2) part of num_cached_tokens; HBM part = cached − external.
++        self.num_external_cached_tokens = num_external_cached_tokens
+         self.kv_transfer_params = kv_transfer_params
+ 
+     def add(self, next_output: "RequestOutput", aggregate: bool) -> None:
+--- a/vllm/v1/request.py
++++ b/vllm/v1/request.py
+@@ -161,6 +161,10 @@
+ 
+         # The number of tokens that have been computed remotely.
+         self.num_external_computed_tokens = 0
++        # The external (store/L2) part of num_cached_tokens, locked at first
++        # prefill alongside num_cached_tokens (num_external_computed_tokens
++        # itself is decremented on preemption, so it cannot be used directly).
++        self.num_external_cached_tokens = 0
+ 
+         self.block_hashes: list[BlockHash] = []
+         # Store the block hasher without binding self to avoid creating a
+--- a/vllm/v1/engine/__init__.py
++++ b/vllm/v1/engine/__init__.py
+@@ -161,6 +161,8 @@
+     num_cached_tokens: int = 0
+     # The number of tokens computed remotely (original count from connector).
+     num_external_computed_tokens: int = 0
++    # The external (store/L2) part of num_cached_tokens, locked at first prefill.
++    num_external_cached_tokens: int = 0
+     routed_experts: np.ndarray | None = None
+     # The number of NaNs in logits.
+     # A value greater than 0 indicates that the output is corrupted.
+--- a/vllm/v1/engine/output_processor.py
++++ b/vllm/v1/engine/output_processor.py
+@@ -172,6 +172,7 @@
+         self.is_prefilling = True
+         self.queue = queue
+         self.num_cached_tokens = 0
++        self.num_external_cached_tokens = 0
+ 
+         self.stats = RequestStateStats(arrival_time=arrival_time) if log_stats else None
+ 
+@@ -370,6 +371,7 @@
+             finished=finished,
+             kv_transfer_params=kv_transfer_params,
+             num_cached_tokens=self.num_cached_tokens,
++            num_external_cached_tokens=self.num_external_cached_tokens,
+             metrics=self.stats,
+         )
+ 
+@@ -618,6 +620,9 @@
+             kv_transfer_params = engine_core_output.kv_transfer_params
+             routed_experts = engine_core_output.routed_experts
+             req_state.num_cached_tokens = engine_core_output.num_cached_tokens
++            req_state.num_external_cached_tokens = (
++                engine_core_output.num_external_cached_tokens
++            )
+             req_state.is_prefilling = False
+ 
+             if pooling_output is None:
+--- a/vllm/entrypoints/openai/engine/protocol.py
++++ b/vllm/entrypoints/openai/engine/protocol.py
+@@ -99,6 +99,8 @@
+ 
+ class PromptTokenUsageInfo(OpenAIBaseModel):
+     cached_tokens: int | None = None
++    # External (store/L2) part of cached_tokens; HBM part = cached − external.
++    external_cached_tokens: int | None = None
+ 
+ 
+ class UsageInfo(OpenAIBaseModel):
+--- a/vllm/entrypoints/openai/completion/serving.py
++++ b/vllm/entrypoints/openai/completion/serving.py
+@@ -283,6 +283,7 @@
+         has_echoed = [False] * num_choices * num_prompts
+         num_prompt_tokens = [0] * num_prompts
+         num_cached_tokens = None
++        num_external_cached_tokens = None
+         first_iteration = True
+ 
+         stream_options = request.stream_options
+@@ -297,6 +298,7 @@
+ 
+                 if first_iteration:
+                     num_cached_tokens = res.num_cached_tokens
++                    num_external_cached_tokens = res.num_external_cached_tokens
+                     first_iteration = False
+ 
+                 prompt_text = res.prompt
+@@ -425,7 +427,8 @@
+ 
+             if self.enable_prompt_tokens_details and num_cached_tokens:
+                 final_usage_info.prompt_tokens_details = PromptTokenUsageInfo(
+-                    cached_tokens=num_cached_tokens
++                    cached_tokens=num_cached_tokens,
++                    external_cached_tokens=num_external_cached_tokens,
+                 )
+ 
+             if include_usage:
+@@ -552,7 +555,8 @@
+             and last_final_res.num_cached_tokens
+         ):
+             usage.prompt_tokens_details = PromptTokenUsageInfo(
+-                cached_tokens=last_final_res.num_cached_tokens
++                cached_tokens=last_final_res.num_cached_tokens,
++                external_cached_tokens=last_final_res.num_external_cached_tokens,
+             )
+ 
+         request_metadata.final_usage_info = usage
+--- a/vllm/entrypoints/openai/chat_completion/serving.py
++++ b/vllm/entrypoints/openai/chat_completion/serving.py
+@@ -520,6 +520,7 @@
+         finish_reason_sent = [False] * num_choices
+         num_prompt_tokens = 0
+         num_cached_tokens = None
++        num_external_cached_tokens = None
+         if self.use_harmony:
+             harmony_parsers = [
+                 get_streamable_parser_for_assistant() for _ in range(num_choices)
+@@ -597,6 +598,7 @@
+                 # response (by the try...catch).
+                 if first_iteration:
+                     num_cached_tokens = res.num_cached_tokens
++                    num_external_cached_tokens = res.num_external_cached_tokens
+                     # Send first response for each request.n (index) with
+                     # the role
+                     role = self.get_chat_request_role(request)
+@@ -1217,7 +1219,8 @@
+                 )
+                 if self.enable_prompt_tokens_details and num_cached_tokens:
+                     final_usage.prompt_tokens_details = PromptTokenUsageInfo(
+-                        cached_tokens=num_cached_tokens
++                        cached_tokens=num_cached_tokens,
++                        external_cached_tokens=num_external_cached_tokens,
+                     )
+ 
+                 final_usage_chunk = ChatCompletionStreamResponse(
+@@ -1604,7 +1607,8 @@
+         )
+         if self.enable_prompt_tokens_details and final_res.num_cached_tokens:
+             usage.prompt_tokens_details = PromptTokenUsageInfo(
+-                cached_tokens=final_res.num_cached_tokens
++                cached_tokens=final_res.num_cached_tokens,
++                external_cached_tokens=final_res.num_external_cached_tokens,
+             )
+ 
+         request_metadata.final_usage_info = usage
+

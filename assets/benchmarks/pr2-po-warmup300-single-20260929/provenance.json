@@ -1,0 +1,353 @@
+{
+  "scope": "Six policies once each, PO, diagnostic Router; original trace arrival schedule unchanged",
+  "warmup_s": 300,
+  "measurement_window_s": [
+    300,
+    900
+  ],
+  "horizon_s": 1200,
+  "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+  "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "trace_sha256": "bf867df2b85118091da9e3658039321b59b99cbe858276732fd33343c331e6b8",
+  "limitations": [
+    "One run per policy; no standard deviation or stable-ranking claim.",
+    "Not directly comparable with the previous [1200,1800) measurement window.",
+    "Instrumented diagnostic child, not the exact unmodified PR2 binary.",
+    "Same trace arrivals imply only a subset of the configured220 sessions enters before the1200s cutoff."
+  ],
+  "base_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+  "arms": {
+    "smetric_default": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "smetric",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120",
+        "--smetric-config",
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/configs/smetric-default.yaml"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": {
+        "cache_source": "request-history text tree",
+        "config_sha256": "bf598135bbdd10927704effc22f6c4b986cac4cc146036d3a27e684c28889a21",
+        "rate_mode": "fixed"
+      },
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    },
+    "smetric_optimized": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "smetric",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120",
+        "--smetric-config",
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/configs/smetric-optimized.yaml"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": {
+        "cache_source": "request-history text tree",
+        "config_sha256": "f775f6e2fbc1ed67aa32543438ef079e16d6e8327fc7bcb692eab50fb0b729c6",
+        "rate_mode": "measured"
+      },
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    },
+    "rendezvous_hash": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "rendezvous_hash",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": null,
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    },
+    "cache_aware": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "cache_aware",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120",
+        "--balance-abs-threshold",
+        "32"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": null,
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    },
+    "power_of_two": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "power_of_two",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": null,
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    },
+    "consistent_hash": {
+      "arrival_schedule": "unchanged original trace; measurement begins earlier",
+      "binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+      "cache_aware_cli_defaults": {
+        "balance_abs_threshold": 32,
+        "balance_rel_threshold": 1.5,
+        "cache_threshold": 0.3,
+        "eviction_interval_secs": 120,
+        "max_tree_size": 67108864
+      },
+      "command": [
+        "<WORKSPACE_ROOT>/ssched-runtime/decision-probe-w300/vllm-router",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18120",
+        "--worker-urls",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://127.0.0.1:8002",
+        "http://127.0.0.1:8003",
+        "http://127.0.0.1:8004",
+        "http://127.0.0.1:8005",
+        "http://127.0.0.1:8006",
+        "http://127.0.0.1:8007",
+        "--policy",
+        "consistent_hash",
+        "--prometheus-host",
+        "127.0.0.1",
+        "--prometheus-port",
+        "19120"
+      ],
+      "decision_logging": true,
+      "diagnostic": true,
+      "horizon_s": 1200,
+      "kv_events": false,
+      "measurement_window_s": [
+        300,
+        900
+      ],
+      "original_pr_revision": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+      "prompt_mode": "text",
+      "python_scheduler": false,
+      "repository": "https://github.com/vllm-project/router.git",
+      "revision": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+      "rr_preroll": {
+        "placement": "round_robin_direct_to_engines",
+        "sessions": 0,
+        "settle_s": 10.0
+      },
+      "smetric_parameters": null,
+      "source_patch_sha256": "ba29aa402bfc4345637caf569fb40962b24c4fbc9f526efddbbb1a76a5ca3cda"
+    }
+  }
+}

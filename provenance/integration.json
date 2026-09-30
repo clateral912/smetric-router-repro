@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/clateral912/smetric-router-repro",
+  "measured_router_base": "689a9afd490d892a5d82ff344c951ba9e184dd00",
+  "measured_diagnostic_child": "8319dd64a8ac28bcb2d96c1d53595a6891c67425",
+  "archived_diagnostic_binary_sha256": "2692a244d6a64d14b09719a1a9d81e74dd07dea1c694474416d6b2262896aca0",
+  "pr130_url": "https://github.com/vllm-project/router/pull/130",
+  "pr130_upstream_head_observed": "d243198bfad5bb233bef34075c559f5bc57b194b",
+  "integration": "Adapt the existing PR130-derived event ingestion/indexing to the measured diagnostic Router, supplying cache_aware and SMetric from one confirmed GPU-prefix source. Retain Tree-only mode without subscriptions when events are disabled.",
+  "supported_deployment": "Regular workers: PO and PD colocation, not the upstream separate kv_aware policy or disaggregated prefill/decode bypass.",
+  "historical_results_changed": false,
+  "historical_router_kv_events": false,
+  "historical_results_scope": "Archived Tree-only measurements; a fresh integrated build and event-backed runs are different artifacts, not new measurements of the historical results.",
+  "po64_trace_sha256": "a5c0fd08620e0104760b3296a82c8630ee1599844821b096382c14bd6d607175",
+  "pd64_trace_sha256": "319cbd94504e1d69853416d470b44c4359e231c47cdf3cf344dc5cb6809c9b1b",
+  "pd64_derivation": "Preserve all rows and timestamps for the 64 historical110-session source conversations whose first arrival is before1200s; other conversations cannot dispatch before that horizon. The explicit64-session trace is a new artifact.",
+  "runtime_entrypoints": [
+    "scripts/build_router.sh",
+    "scripts/prepare_trace.py",
+    "scripts/run_router.py",
+    "scripts/run_matrix.py",
+    "scripts/score_results.py",
+    "engine/apply_patches.py",
+    "engine/launch.py"
+  ]
+}

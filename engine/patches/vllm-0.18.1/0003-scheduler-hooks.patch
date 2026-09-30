@@ -1,0 +1,590 @@
+--- a/vllm/v1/core/sched/scheduler.py
++++ b/vllm/v1/core/sched/scheduler.py
+@@ -64,6 +64,261 @@
+ logger = init_logger(__name__)
+ 
+ 
++# SSCHED_ES_START
++import json as _es_json
++import os as _es_os
++import threading as _es_threading
++import time as _es_time
++
++_ES_URL = _es_os.environ.get("SSCHED_REDIS_URL", "")
++_ES_ID = _es_os.environ.get("SSCHED_ENGINE_ID",
++                            f"engine_{_es_os.getpid()}")
++_ES_PERIOD_S = float(_es_os.environ.get("SSCHED_STATE_PERIOD_MS", "50")) / 1000.0
++_ES_TTL_MS = 5000
++_ES_SCHEMA_VERSION = 3  # EngineState v3 (ssched.state.schema)
++
++
++def _es_kv_bytes_per_token(scheduler) -> int:
++    """KV bytes per token for kvstore byte accounting.
++
++    Derived at first use from the engine's own kv_cache_config
++    (sum over groups: layers x page_size_bytes / block_size), so it
++    tracks whatever model this engine is serving. SSCHED_KV_BYTES_PER_TOKEN
++    overrides; the Qwen3-Coder-30B geometry (96 KiB) is the last resort.
++    """
++    cached = getattr(scheduler, "_es_kv_bpt", None)
++    if cached is not None:
++        return cached
++    env = _es_os.environ.get("SSCHED_KV_BYTES_PER_TOKEN")
++    if env:
++        value = int(env)
++    else:
++        value = 0
++        try:
++            for group in scheduler.kv_cache_config.kv_cache_groups:
++                spec = group.kv_cache_spec
++                value += (len(group.layer_names)
++                          * int(spec.page_size_bytes) // int(spec.block_size))
++        except Exception:
++            value = 0
++        if value <= 0:
++            value = 98304
++    try:
++        scheduler._es_kv_bpt = value
++    except Exception:
++        pass
++    return value
++
++
++def _es_decode_state(scheduler) -> dict:
++    state = getattr(scheduler, "_es_decode_state", None)
++    if not isinstance(state, dict):
++        state = {"last_by_req": {}, "gap_ema_s": 0.0, "gap_max_s": 0.0}
++        try:
++            scheduler._es_decode_state = state
++        except Exception:
++            pass
++    return state
++
++
++def _es_note_kvstore_reads(scheduler, scheduled_new_reqs):
++    """Accumulate global-store READ traffic: each newly scheduled request
++    carries num_external_computed_tokens (the store share of its prefix
++    hit, set by the patched scheduler); tokens x KV-bytes/token is the
++    volume fetched from the store. WRITE traffic needs a store-side
++    (LMCache/Mooncake) patch and stays 0 until that lands."""
++    try:
++        ext_tokens = 0
++        for r in scheduled_new_reqs:
++            ext = getattr(r, "num_external_computed_tokens", None)
++            if ext is None:
++                rid = getattr(r, "request_id", None) or getattr(r, "req_id", None)
++                req = scheduler.requests.get(rid) if rid else None
++                ext = getattr(req, "num_external_computed_tokens", 0) if req else 0
++            ext_tokens += int(ext or 0)
++        if ext_tokens:
++            scheduler._es_kvstore_read_bytes = (
++                int(getattr(scheduler, "_es_kvstore_read_bytes", 0))
++                + ext_tokens * _es_kv_bytes_per_token(scheduler))
++    except Exception:
++        pass
++
++
++def _es_inflight(scheduler):
++    ledger = getattr(scheduler, "_es_inflight_tokens", None)
++    if ledger is None:
++        ledger = {}
++        scheduler._es_inflight_tokens = ledger
++    return ledger
++
++
++def _es_output_hook(scheduler, update):
++    def completed(*args, **kwargs):
++        output = args[0] if args else kwargs["scheduler_output"]
++        try:
++            return update(*args, **kwargs)
++        finally:
++            ledger = _es_inflight(scheduler)
++            for rid, count in output.num_scheduled_tokens.items():
++                remaining = ledger.get(rid, 0) - int(count)
++                if remaining > 0:
++                    ledger[rid] = remaining
++                else:
++                    ledger.pop(rid, None)
++            _es_publish_now(scheduler)
++    return completed
++
++
++def _es_note_decode(scheduler, scheduled_timestamp, num_scheduled_tokens,
++                    scheduled_new_reqs, scheduled_resumed_reqs):
++    """Track per-request decode service cadence from one scheduler step."""
++    _es_note_kvstore_reads(scheduler, scheduled_new_reqs)
++    ledger = _es_inflight(scheduler)
++    for rid, count in num_scheduled_tokens.items():
++        ledger[rid] = ledger.get(rid, 0) + int(count)
++    try:
++        state = _es_decode_state(scheduler)
++        last_by_req = state["last_by_req"]
++        new_ids = {r.request_id for r in scheduled_new_reqs}
++        resumed_ids = {r.request_id for r in scheduled_resumed_reqs}
++        alpha = 0.2
++        for rid, n in num_scheduled_tokens.items():
++            if rid in new_ids or rid in resumed_ids or int(n) > 1:
++                continue
++            prev = last_by_req.get(rid)
++            if prev is not None:
++                gap = max(0.0, float(scheduled_timestamp) - float(prev))
++                state["gap_max_s"] = max(float(state["gap_max_s"]), gap)
++                old = float(state["gap_ema_s"])
++                state["gap_ema_s"] = gap if old <= 0.0 else (
++                    old * (1.0 - alpha) + gap * alpha)
++            last_by_req[rid] = float(scheduled_timestamp)
++        running_ids = {getattr(r, "request_id", None)
++                       for r in scheduler.running}
++        for rid in list(last_by_req):
++            if rid not in running_ids:
++                last_by_req.pop(rid, None)
++    except Exception:
++        pass
++
++
++def _es_snapshot(scheduler) -> dict:
++    """Cheap O(batch) EngineState v3 payload from the live scheduler."""
++    try:
++        pool = scheduler.kv_cache_manager.block_pool
++        total = int(pool.num_gpu_blocks)
++        free = int(pool.get_num_free_blocks())
++    except Exception:
++        total = free = 0
++    n_run = pend = dec = n_dec = n_pref = max_pref = 0
++    active_decode_ids = []
++    inflight = _es_inflight(scheduler)
++    try:
++        for r in scheduler.running:
++            n_run += 1
++            npr = int(getattr(r, "num_prompt_tokens", 0))
++            nct = max(0, int(getattr(r, "num_computed_tokens", 0))
++                      - inflight.get(r.request_id, 0))
++            nout = int(getattr(r, "num_output_tokens",
++                              max(0, int(getattr(r, "num_tokens", npr)) - npr)))
++            if nct < npr or nout == 0:
++                rem = max(0, npr - nct)
++                pend += rem
++                n_pref += 1
++                max_pref = max(max_pref, rem)
++            else:
++                limit = getattr(r, "max_tokens", None)
++                if limit is not None and nout >= limit:
++                    continue
++                dec += int(getattr(r, "num_tokens", 0))
++                n_dec += 1
++                rid = getattr(r, "request_id", None)
++                if rid is not None:
++                    active_decode_ids.append(rid)
++    except Exception:
++        pass
++    n_wait = 0
++    try:
++        n_wait = len(scheduler.waiting) + len(
++            getattr(scheduler, "skipped_waiting", []))
++        for r in list(scheduler.waiting):
++            pend += max(0, int(getattr(r, "num_prompt_tokens", 0))
++                        - max(0, int(getattr(r, "num_computed_tokens", 0))
++                              - inflight.get(r.request_id, 0)))
++    except Exception:
++        pass
++
++    state = _es_decode_state(scheduler)
++    now_m = _es_time.monotonic()
++    active_gap_max = 0.0
++    for rid in active_decode_ids:
++        last = state["last_by_req"].get(rid)
++        if last is not None:
++            active_gap_max = max(active_gap_max,
++                                 max(0.0, now_m - float(last)))
++
++    return {
++        "schema_version": _ES_SCHEMA_VERSION,
++        "engine_id": _ES_ID,
++        "ts": _es_time.time(),
++        "num_running": n_run,
++        "num_waiting": int(n_wait),
++        "gpu_blocks_total": total,
++        "gpu_blocks_free": free,
++        "gpu_kv_used_frac": ((total - free) / total) if total > 0 else 0.0,
++        "pending_prefill_tokens": int(pend),
++        "ongoing_decode_tokens": int(dec),
++        "num_prefilling": n_pref,
++        "max_prefill_remaining": int(max_pref),
++        "decode_active_requests": n_dec,
++        "decode_service_active_gap_max_s": active_gap_max,
++        "decode_service_gap_ema_s": float(state["gap_ema_s"]),
++        "decode_service_gap_max_s": float(state["gap_max_s"]),
++        "kvstore_read_bytes_total": int(
++            getattr(scheduler, "_es_kvstore_read_bytes", 0)),
++        "kvstore_write_bytes_total": int(
++            getattr(scheduler, "_es_kvstore_write_bytes", 0)),
++    }
++
++
++class _ESPublisher:
++    def __init__(self, scheduler):
++        import redis as _redis  # engine venv dependency
++        self._sched = scheduler
++        self._redis = _redis.Redis.from_url(_ES_URL)
++        self._key = f"engine_state:{_ES_ID}"
++        self._lock = _es_threading.Lock()
++        self._last = 0.0
++        self._t = _es_threading.Thread(target=self._loop, daemon=True)
++        self._t.start()
++
++    def publish_now(self):
++        try:
++            with self._lock:
++                self._last = _es_time.monotonic()
++                self._redis.set(self._key,
++                                _es_json.dumps(_es_snapshot(self._sched)),
++                                px=_ES_TTL_MS)
++        except Exception:
++            pass
++
++    def _loop(self):
++        while True:
++            _es_time.sleep(_ES_PERIOD_S)
++            if _es_time.monotonic() - self._last >= _ES_PERIOD_S:
++                self.publish_now()
++
++
++def _es_publish_now(scheduler):
++    try:
++        publisher = getattr(scheduler, "_es_publisher", None)
++        if publisher is not None:
++            publisher.publish_now()
++    except Exception:
++        pass
++# SSCHED_ES_END
++
++
+ class Scheduler(SchedulerInterface):
+     def __init__(
+         self,
+@@ -234,6 +489,8 @@
+             hash_block_size=self.block_size,
+             metrics_collector=self.kv_metrics_collector,
+         )
++        if self.connector is not None and hasattr(self.connector, "set_block_pool"):
++            self.connector.set_block_pool(self.kv_cache_manager.block_pool)
+         self.use_pp = self.parallel_config.pipeline_parallel_size > 1
+         self.use_v2_model_runner = envs.VLLM_USE_V2_MODEL_RUNNER
+ 
+@@ -285,6 +542,94 @@
+ 
+         self._pause_state: PauseState = PauseState.UNPAUSED
+ 
++        # agentic-kv: optional step-level JSONL logger for B2 interference
++        # analysis. Activated by env vars; no-op otherwise.
++        self._agentic_step_log_fh = None
++        self._agentic_step_id = 0
++        self._agentic_worker_id = None
++        import os as _os
++        self._agentic_decode_token_reservation = (
++            _os.environ.get("AGENTIC_DECODE_TOKEN_RESERVATION", "")
++            .strip()
++            .lower()
++            in {"1", "true", "yes", "on"}
++        )
++        if self._agentic_decode_token_reservation:
++            logger.info("agentic-kv decode token reservation enabled")
++        self._agentic_decode_first_no_mix = (
++            _os.environ.get("AGENTIC_DECODE_FIRST_NO_MIX", "")
++            .strip()
++            .lower()
++            in {"1", "true", "yes", "on"}
++        )
++        if self._agentic_decode_first_no_mix:
++            logger.info("agentic-kv decode-first no-mix scheduling enabled")
++
++        # SSCHED_ES_START
++        if _ES_URL:
++            try:
++                self._es_publisher = _ESPublisher(self)
++                self.update_from_output = _es_output_hook(self, self.update_from_output)
++                logger.info("ssched engine-state publisher: url=%s id=%s",
++                            _ES_URL, _ES_ID)
++            except Exception as _e:
++                logger.warning("ssched engine-state publisher disabled (%r)",
++                               _e)
++        # SSCHED_ES_END
++        _step_path = _os.environ.get("AGENTIC_STEP_LOG_PATH")
++        if _step_path:
++            try:
++                _os.makedirs(_os.path.dirname(_step_path) or ".", exist_ok=True)
++                self._agentic_step_log_fh = open(_step_path, "a", buffering=1)
++                self._agentic_worker_id = _os.environ.get(
++                    "AGENTIC_WORKER_ID",
++                    f"dp{self.parallel_config.data_parallel_rank}",
++                )
++                logger.info(
++                    "agentic-kv step log enabled: path=%s worker_id=%s",
++                    _step_path, self._agentic_worker_id,
++                )
++            except Exception as _exc:
++                logger.warning("agentic-kv step log disabled (%r)", _exc)
++                self._agentic_step_log_fh = None
++
++    def _agentic_request_needs_decode_token(self, request: Request) -> bool:
++        if request.num_computed_tokens < request.num_prompt_tokens:
++            return False
++        if (
++            request.num_output_placeholders > 0
++            and request.num_computed_tokens + 2 - request.num_output_placeholders
++            >= request.num_prompt_tokens + request.max_tokens
++        ):
++            return False
++        pending_tokens = (
++            request.num_tokens_with_spec
++            + request.num_output_placeholders
++            - request.num_computed_tokens
++        )
++        return pending_tokens > 0 and request.num_computed_tokens < (
++            self.max_model_len - 1
++        )
++
++    def _agentic_decode_reserve_after(self, req_index: int, token_budget: int) -> int:
++        if not self._agentic_decode_token_reservation or token_budget <= 0:
++            return 0
++        reserve = 0
++        for request in self.running[req_index + 1:]:
++            if self._agentic_request_needs_decode_token(request):
++                reserve += 1
++                if reserve >= token_budget:
++                    break
++        return reserve
++
++    def _agentic_has_decode_ready_after(self, req_index: int) -> bool:
++        if not self._agentic_decode_first_no_mix:
++            return False
++        return any(
++            self._agentic_request_needs_decode_token(request)
++            for request in self.running[req_index + 1:]
++        )
++
+     def _mamba_block_aligned_split(
+         self,
+         request: Request,
+@@ -358,6 +703,7 @@
+         if self._pause_state == PauseState.PAUSED_ALL:
+             # Do not schedule any requests when paused.
+             token_budget = 0
++        agentic_step_scheduled_decode = False
+ 
+         # Encoder-related.
+         scheduled_encoder_inputs: dict[str, list[int]] = {}
+@@ -396,8 +742,34 @@
+                 + request.num_output_placeholders
+                 - request.num_computed_tokens
+             )
++            agentic_request_is_prefill = (
++                request.num_computed_tokens < request.num_prompt_tokens
++            )
++            if (
++                self._agentic_decode_first_no_mix
++                and agentic_request_is_prefill
++                and (
++                    agentic_step_scheduled_decode
++                    or self._agentic_has_decode_ready_after(req_index)
++                )
++            ):
++                req_index += 1
++                continue
+             if 0 < self.scheduler_config.long_prefill_token_threshold < num_new_tokens:
+                 num_new_tokens = self.scheduler_config.long_prefill_token_threshold
++            if (
++                self._agentic_decode_token_reservation
++                and num_new_tokens > 1
++                and agentic_request_is_prefill
++            ):
++                decode_reserve = self._agentic_decode_reserve_after(
++                    req_index, token_budget
++                )
++                if decode_reserve > 0:
++                    num_new_tokens = min(
++                        num_new_tokens,
++                        max(0, token_budget - decode_reserve),
++                    )
+             num_new_tokens = min(num_new_tokens, token_budget)
+ 
+             # Make sure the input position does not exceed the max model len.
+@@ -505,6 +877,8 @@
+             req_to_new_blocks[request_id] = new_blocks
+             num_scheduled_tokens[request_id] = num_new_tokens
+             token_budget -= num_new_tokens
++            if not agentic_request_is_prefill:
++                agentic_step_scheduled_decode = True
+             req_index += 1
+ 
+             # Speculative decode related.
+@@ -551,7 +925,14 @@
+             assert len(scheduled_loras) <= self.lora_config.max_loras
+ 
+         # Next, schedule the WAITING requests.
+-        if not preempted_reqs and self._pause_state == PauseState.UNPAUSED:
++        if (
++            not preempted_reqs
++            and self._pause_state == PauseState.UNPAUSED
++            and not (
++                self._agentic_decode_first_no_mix
++                and agentic_step_scheduled_decode
++            )
++        ):
+             step_skipped_waiting = create_request_queue(self.policy)
+ 
+             while (self.waiting or self.skipped_waiting) and token_budget > 0:
+@@ -805,6 +1186,11 @@
+                 # Count the number of prefix cached tokens.
+                 if request.num_cached_tokens < 0:
+                     request.num_cached_tokens = num_computed_tokens
++                    # Lock the external (store/L2) part now, before any
++                    # preemption decrements num_external_computed_tokens.
++                    request.num_external_cached_tokens = (
++                        request.num_external_computed_tokens
++                    )
+                 # Encoder-related.
+                 if encoder_inputs_to_schedule:
+                     scheduled_encoder_inputs[request_id] = encoder_inputs_to_schedule
+@@ -924,8 +1310,94 @@
+ 
+         with record_function_or_nullcontext("schedule: update_after_schedule"):
+             self._update_after_schedule(scheduler_output)
++
++        # SSCHED_ES_START
++        if _ES_URL:
++            _es_note_decode(
++                self,
++                scheduled_timestamp,
++                num_scheduled_tokens,
++                scheduled_new_reqs,
++                scheduled_resumed_reqs,
++            )
++            _es_publish_now(self)
++        # SSCHED_ES_END
++        if self._agentic_step_log_fh is not None:
++            self._agentic_emit_step_log(
++                scheduled_timestamp=scheduled_timestamp,
++                num_scheduled_tokens=num_scheduled_tokens,
++                total_num_scheduled_tokens=total_num_scheduled_tokens,
++                scheduled_new_reqs=scheduled_new_reqs,
++                scheduled_resumed_reqs=scheduled_resumed_reqs,
++                scheduled_running_reqs=scheduled_running_reqs,
++                preempted_reqs=preempted_reqs,
++            )
++
+         return scheduler_output
+ 
++    def _agentic_emit_step_log(
++        self,
++        scheduled_timestamp: float,
++        num_scheduled_tokens: dict[str, int],
++        total_num_scheduled_tokens: int,
++        scheduled_new_reqs: list[Request],
++        scheduled_resumed_reqs: list[Request],
++        scheduled_running_reqs: list[Request],
++        preempted_reqs: list[Request],
++    ) -> None:
++        """Emit one JSONL line per scheduler step for agentic-kv B2 analysis.
++
++        Cheap when enabled (a few dozen dict lookups + one write). When the
++        env var AGENTIC_STEP_LOG_PATH is unset the caller does not invoke
++        this method at all.
++        """
++        import json as _json
++        import time as _time
++        new_ids = {r.request_id for r in scheduled_new_reqs}
++        resumed_ids = {r.request_id for r in scheduled_resumed_reqs}
++        running_ids = {r.request_id for r in scheduled_running_reqs}
++        per_req: list[dict[str, Any]] = []
++        prefill_tokens = 0
++        decode_tokens = 0
++        for rid, n in num_scheduled_tokens.items():
++            is_new = rid in new_ids
++            is_resumed = rid in resumed_ids
++            # Heuristic: any step touching a new/resumed request is prefill;
++            # otherwise per-step tokens >1 is chunked prefill, ==1 is decode.
++            if is_new or is_resumed or n > 1:
++                prefill_tokens += n
++                phase = "prefill"
++            else:
++                decode_tokens += n
++                phase = "decode"
++            per_req.append({
++                "rid": rid, "n": n, "phase": phase,
++                "is_new": is_new, "is_resumed": is_resumed,
++            })
++        record = {
++            "t_unix": _time.time(),
++            "t_monotonic": scheduled_timestamp,
++            "step_id": self._agentic_step_id,
++            "worker_id": self._agentic_worker_id,
++            "total_scheduled_tokens": total_num_scheduled_tokens,
++            "prefill_tokens": prefill_tokens,
++            "decode_tokens": decode_tokens,
++            "n_new": len(scheduled_new_reqs),
++            "n_resumed": len(scheduled_resumed_reqs),
++            "n_running_scheduled": len(scheduled_running_reqs),
++            "n_running_total": len(self.running),
++            "n_waiting": len(self.waiting),
++            "n_preempted": len(preempted_reqs),
++            "preempted_ids": [r.request_id for r in preempted_reqs],
++            "per_req": per_req,
++        }
++        try:
++            self._agentic_step_log_fh.write(_json.dumps(record) + "\n")
++        except Exception as _exc:
++            logger.warning("agentic-kv step log write failed (%r)", _exc)
++            self._agentic_step_log_fh = None
++        self._agentic_step_id += 1
++
+     def _preempt_request(self, request: Request, timestamp: float) -> None:
+         """Preempt a request and put it back to the waiting queue.
+ 
+@@ -1441,6 +1913,7 @@
+                         trace_headers=request.trace_headers,
+                         num_cached_tokens=request.num_cached_tokens,
+                         num_external_computed_tokens=request.num_external_computed_tokens,
++                        num_external_cached_tokens=request.num_external_cached_tokens,
+                         routed_experts=routed_experts,
+                         num_nans_in_logits=request.num_nans_in_logits,
+                     )
+@@ -2097,17 +2570,34 @@
+         # KV Connector:: update recv and send status from last step.
+         for req_id in kv_connector_output.finished_recving or ():
+             logger.debug("Finished recving KV transfer for request %s", req_id)
+-            assert req_id in self.requests
++            if req_id not in self.requests:
++                logger.warning("Skipping finished_recving for unknown request %s (already aborted?)", req_id)
++                continue
+             req = self.requests[req_id]
+             if req.status == RequestStatus.WAITING_FOR_REMOTE_KVS:
+                 self.finished_recving_kv_req_ids.add(req_id)
+-            else:
+-                assert RequestStatus.is_finished(req.status)
++            elif RequestStatus.is_finished(req.status):
+                 self._free_blocks(self.requests[req_id])
++            else:
++                logger.debug(
++                    "finished_recving for %s in status %s (partial remote prefill?)",
++                    req_id, req.status)
+         for req_id in kv_connector_output.finished_sending or ():
+             logger.debug("Finished sending KV transfer for request %s", req_id)
+-            assert req_id in self.requests
++            if req_id not in self.requests:
++                logger.warning("Skipping finished_sending for unknown request %s (already aborted?)", req_id)
++                continue
++            sent_block_ids: set[int] = set()
++            for group in self.kv_cache_manager.get_block_ids(req_id):
++                sent_block_ids.update(group)
+             self._free_blocks(self.requests[req_id])
++            # e13391e: evict sent blocks from the prefix cache. Intended ONLY for
++            # session MIGRATION (the source worker won't see the session again).
++            # For plain PD-disagg producer->consumer transfers this destroys
++            # cross-turn producer reuse, so it is gated OFF by default and enabled
++            # only for migration experiments via VLLM_EVICT_SENT_BLOCKS=1.
++            if sent_block_ids and __import__("os").environ.get("VLLM_EVICT_SENT_BLOCKS") == "1":
++                self.kv_cache_manager.evict_blocks(sent_block_ids)
+ 
+     def _update_requests_with_invalid_blocks(
+         self,
