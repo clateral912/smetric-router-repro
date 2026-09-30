@@ -157,6 +157,36 @@ defaults for this checkout. Archived input checksums describe the original
 measurement inputs, not the path-redacted copies; trace contents and results are
 unchanged.
 
+## Router revision provenance
+
+Router revisions in the archived manifests refer to the
+[Router fork](https://github.com/clateral912/router), not to commits in this
+standalone reproduction repository.
+
+| Artifact | Commit |
+|---|---|
+| Measured Router base | [`689a9afd`](https://github.com/clateral912/router/commit/689a9afd490d892a5d82ff344c951ba9e184dd00) |
+| Measured diagnostic Router | [`8319dd64`](https://github.com/clateral912/router/commit/8319dd64a8ac28bcb2d96c1d53595a6891c67425) |
+| Squashed policy submitted in [Router PR #330](https://github.com/vllm-project/router/pull/330) | [`0690e3a7`](https://github.com/vllm-project/router/commit/0690e3a71376cd0558994293299f25888980ec81) |
+| Original published repro snapshot | [`99521022`](https://github.com/clateral912/smetric-router-repro/commit/995210222bc8cfc3afd0a52f091b8c94c3de9922) |
+
+The Router tag `archive/smetric-diagnostic-8319dd64` retains the original
+diagnostic commit; its diff from the measured base is byte-identical to all four
+archived `router-source.patch` files. The tag
+`archive/smetric-pre-squash-20260930` preserves the original five-commit policy
+history. The squashed policy has the same Git tree as that archived branch tip.
+These tags preserve provenance; they do not change the measured revisions or
+establish a new benchmark result. Existing figure and result permalinks remain
+pinned to the original repro snapshot.
+
+To retrieve the exact historical diagnostic source:
+
+```bash
+git clone --no-checkout https://github.com/clateral912/router.git router-historical
+git -C router-historical fetch origin refs/tags/archive/smetric-diagnostic-8319dd64
+git -C router-historical checkout --detach 8319dd64a8ac28bcb2d96c1d53595a6891c67425
+```
+
 ## Integration verification
 
 The integration was exercised with real Qwen3-Coder workers, LMCache/Mooncake and
