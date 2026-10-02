@@ -25,7 +25,7 @@ starts a distinct experiment; it does not establish a new goodput result.
 | `configs/smetric/` | Fixed-rate default, learned initial, `SLACK=0.5`, `SLACK=0.15` and retained `SLACK=0.25` configurations |
 | `engine/` | Exact package pins, all four measured vLLM patches, verified patch installer and foreground launcher |
 | `provenance/` | Public trace checksums and captured PO traffic mapping |
-| `assets/benchmarks/` | Historical measurement bundles, figures, renderers and path-redacted diagnostic provenance |
+| `assets/benchmarks/` | Historical bundles and completed three-repeat measurements, request-level data, figures and provenance |
 
 Model weights, public source/generated traces, virtual environments, build
 outputs and run logs are intentionally not committed. The scripts prepare these
@@ -174,6 +174,15 @@ cannot be reported as complete.
 `provenance/three-repeat-verification.json` records six real single-GPU smoke
 runs (PO and colocation, three each), with fresh zero-key caches and 36 completed
 requests. Those short smoke runs are not full performance measurements.
+
+The full rerun from measurement commit `2bb26956` is complete: **81/81 runs**,
+27 workload/configuration combinations with exactly three independent repeats.
+The [published result bundle](assets/benchmarks/po-colocation-three-repeat-2bb26956-20261001/README.md)
+contains all three measurements and their variability, all 82,674 scored
+request rows, the 81-command plan, empty-cache readiness evidence, environment,
+model/Router/input fingerprints and integrity hashes. PO127 and PO64 goodput
+count input tokens; PD64 goodput counts generated output tokens. These new
+results are distinct from historical measurements and short smoke runs.
 
 
 The common event index supplies confirmed GPU-resident prefixes to both

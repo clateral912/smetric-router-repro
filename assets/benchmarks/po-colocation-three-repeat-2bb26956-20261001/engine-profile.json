@@ -1,0 +1,83 @@
+{
+  "config": {
+    "gpu_memory_utilization": 0.9,
+    "http_host": "127.0.0.1",
+    "internal_port_base": 28000,
+    "kv_block_size": 16,
+    "kv_events_port_base": 5557,
+    "master_metrics_port": 19004,
+    "master_rpc_port": 50151,
+    "max_model_len": 400000,
+    "max_num_batched_tokens": 8192,
+    "model": "<MODEL_DIR>",
+    "served_model_name": "Qwen3-30B-A3B",
+    "worker_port_base": 8000,
+    "workers": [
+      {
+        "gpu": "0",
+        "rdma_device": "mlx5_105"
+      },
+      {
+        "gpu": "1",
+        "rdma_device": "mlx5_83"
+      },
+      {
+        "gpu": "2",
+        "rdma_device": "mlx5_9"
+      },
+      {
+        "gpu": "3",
+        "rdma_device": "mlx5_24"
+      },
+      {
+        "gpu": "4",
+        "rdma_device": "mlx5_119"
+      },
+      {
+        "gpu": "5",
+        "rdma_device": "mlx5_88"
+      },
+      {
+        "gpu": "6",
+        "rdma_device": "mlx5_75"
+      },
+      {
+        "gpu": "7",
+        "rdma_device": "mlx5_44"
+      }
+    ]
+  },
+  "patched_vllm_files_sha256": {
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_connector.py": "0ce6f740bec83b6fa9753666783b22d0adfe24348cf2e529dee71fb3bbe49376",
+    "distributed/kv_transfer/kv_connector/v1/mooncake/mooncake_utils.py": "2fe6bd0fd75ad6c2a057e0b9ae2a28b853ee6522ef4733ffa487d944741cbd5b",
+    "entrypoints/openai/chat_completion/serving.py": "6a1c39522a8248e761efac41fd126a3ff057bfcc5a5490a696c88d258eaa14ef",
+    "entrypoints/openai/completion/serving.py": "82653d0c10a6baf1b959773a6109e1b16516d36b49d294ef51301cc3cf26bd84",
+    "entrypoints/openai/engine/protocol.py": "c13ba2471eb3ed1d87875b7a5af9f1a2a39ba459b066c9cbec9c8a90f45f83e0",
+    "outputs.py": "07bce159dec4406ba71ac5fcfda37c24e9ed01239da6f1ddc394064e7096d8a2",
+    "v1/core/sched/scheduler.py": "3cc8e7d64c2c863e1f95cdcc2aa6bcee82db19e064a2557c9e16564a864ba307",
+    "v1/engine/__init__.py": "0a547d0c6fc9270a3e6ee13b32f23e0656e64a958767c168ccdfa5fe0dfb9956",
+    "v1/engine/output_processor.py": "dc2db6f219ad5438caedf44ec2b36d65437c9a57a1343a04eadf42fbfe3e037a",
+    "v1/metrics/stats.py": "367a2ca71c6affc9dc553fc5727c0ad82b4f4e842f7c0eaedeef3507f151267c",
+    "v1/request.py": "0135e66ef432e10100ed5ddb4cdef14d203a392de10bae55fa0f1229e395c212"
+  },
+  "python": "3.12.3 (main, Feb  4 2025, 14:48:35) [GCC 13.3.0]",
+  "source_config_sha256": "faab9de0fa7a3d557f677b14a58a8164fd3355a0b0c2051fae07e9c02a81af96",
+  "versions": {
+    "PyYAML": {
+      "location": "<WORKSPACE_ROOT>/.venv-engine/lib/python3.12/site-packages",
+      "version": "6.0.3"
+    },
+    "lmcache": {
+      "location": "<WORKSPACE_ROOT>/.venv-engine/lib/python3.12/site-packages",
+      "version": "0.4.4"
+    },
+    "mooncake-transfer-engine": {
+      "location": "<WORKSPACE_ROOT>/.venv-engine/lib/python3.12/site-packages",
+      "version": "0.3.11.post1"
+    },
+    "vllm": {
+      "location": "<WORKSPACE_ROOT>/.venv-engine/lib/python3.12/site-packages",
+      "version": "0.18.1"
+    }
+  }
+}

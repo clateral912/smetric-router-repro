@@ -1,0 +1,44 @@
+{
+  "completed_owned_stack_shutdowns": 81,
+  "counts": {
+    "colocation": 27,
+    "completed": 81,
+    "groups": 27,
+    "planned": 81,
+    "po": 54,
+    "repeats_per_group": 3,
+    "unique": 81
+  },
+  "excluded_failed_attempt": {
+    "provenance": "provenance/three-repeat-port-release.json",
+    "reason": "Immediate stack restart hit EADDRINUSE after the first complete measurement; port release barrier fix was published and the entire matrix restarted",
+    "revision": "04fde30378d928e05acb7d245da539a4022ea308"
+  },
+  "final_gpu_cleanup": "nvidia-smi compute process query returned the CSV header only",
+  "historical_and_smoke_runs_included": false,
+  "identical_engine_config_package_versions_and_patched_files_runs": 81,
+  "measurement_cohort_unserved": {
+    "pd64": 12,
+    "po127": 37,
+    "po64": 0
+  },
+  "measurement_revision": "2bb26956286930f2ad8a908589c1dc76e3722e63",
+  "reconciliation": [
+    "Plan versus completed scenario/case/repeat keys",
+    "Offered/served/passing counts",
+    "Measurement window and completion horizon",
+    "Goodput from passing input/output tokens",
+    "TTFT and TPOT means and percentiles",
+    "Fixed requested versus actual PD output lengths"
+  ],
+  "repository": "https://github.com/clateral912/smetric-router-repro",
+  "request_rows_by_scenario": {
+    "pd64": 18617,
+    "po127": 41908,
+    "po64": 22149
+  },
+  "scored_request_rows_reconciled": 82674,
+  "verified_workers_per_run": 8,
+  "wall_time_s": 115803.87,
+  "zero_key_and_zero_allocated_bytes_readiness_runs": 81
+}

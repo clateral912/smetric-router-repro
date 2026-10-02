@@ -1,0 +1,29 @@
+{
+  "measurement_revision": "2bb26956286930f2ad8a908589c1dc76e3722e63",
+  "original_artifacts_sha256": {
+    "analysis.json": "0aa75898ea9ad8831172dfbd70516e36890e52f16a0f99cc19cc15e9653cafbb",
+    "completed.jsonl": "7eb17e6a00c566886e4c3971d7eaf9009e87c714478a00ebe8d0da7fd82fa9b8",
+    "plan.json": "89f85db3141c4175d1229f700a29a99ff0006b2418a69a96b68008c64f308d56",
+    "summary.csv": "b49cc2ba5e3e2e92a6bba43b63cc125166b6d0221eda9be6337b55a45ecace75"
+  },
+  "path_redaction": {
+    "checkout": "<WORKSPACE_ROOT>",
+    "model": "<MODEL_DIR>"
+  },
+  "published_files_sha256": {
+    "README.md": "6e57e8eba43fce2eb86f3572d47d203c37bbb6f116390185659b4e25996e35d9",
+    "analysis.json": "2031a95cc3cf9711d1b192295e3fc5a32c77e085f2cc788b42aa2afeae71aa31",
+    "comparison.csv": "e59c9ecf1a40826f67ebb8722d9c7a0d60197ec804e3f1ad94eb0268b7d0b939",
+    "completed.jsonl": "a2573b9ca8871b53b03c5272d5fd11487a55ea99909084ca8255b5f6c0fb2b4f",
+    "engine-profile.json": "4874f81aa7b1782b8c033af91b1b234d27bdbc7844d02c748d50a68b5818295f",
+    "environment.json": "da6eb59abbfca53c79e9fc17a946612a33f54c64b9951b85b237c07d897c6a2a",
+    "model-lock.json": "bc42de5557ac2c7b8927545f84634713830f26dd7755e7626b44345f257c0ae5",
+    "offered-requests.csv": "1896b6544874c6c29a8ad4c4919aa0b9f22370a80cd3fe607006a761f902eb81",
+    "plan.json": "8606385d0861af2bba6a8a9afcbbbe67c029ea42ae374ebb9294d05168bab51a",
+    "readiness.json": "1bc5d32b752454d64be9691797f30514028031131cb17f9c2efca32711c478df",
+    "run-ledger.csv": "c67ba81647f07dbb9d178aa7516db22d2dad6f80eef3147cd774366d970ac6cf",
+    "summary.csv": "b49cc2ba5e3e2e92a6bba43b63cc125166b6d0221eda9be6337b55a45ecace75",
+    "verification.json": "2a856370b16ae74120d74c369ce61052d500298f1df11dcb9fc8f7c2043fc227"
+  },
+  "self_hash": "Excluded to avoid a circular artifact-lock hash; sha256sums.txt includes artifact-lock.json"
+}
